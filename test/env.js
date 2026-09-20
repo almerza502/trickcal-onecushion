@@ -1,0 +1,104 @@
+// jsdom 上でユーザースクリプトをそのまま動かすための土台。差し替えるのは GM_* だけ。
+const fs = require('fs');
+const path = require('path');
+const { JSDOM, VirtualConsole } = require('jsdom');
+const { webcrypto } = require('crypto');
+
+const SCRIPT = process.argv[2] || path.join(__dirname, '..', 'trickcal-guard.user.js');
+const code = fs.readFileSync(SCRIPT, 'utf8');
+const version = (code.match(/@version\s+(\S+)/) || [])[1];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// gm        : GM_getValue / GM_setValue の中身（Map）。同じ Map を渡した boot どうしは「同じ保存領域を見ている別のタブ」になる。
+//             再読込を表すときは、古いほうを close() してからもう一度 boot する
+// opts.post : 報告 POST への応答。'ok' | 'error' | 'timeout' | <status 番号> | 未指定（応答なし）
+// opts.noInfo: GM_info を定義しない
+// opts.noListener: GM_addValueChangeListener を定義しない（対応していない環境）
+// opts.remote: 配布リスト GET への応答を返す関数。{ status, responseText } | 'error' | 'timeout'。未指定なら応答なし
+// opts.clock : { now } を渡すとスクリプトから見える Date.now() がこの値になる
+// スクリプトの setInterval は実際には動かさず、tick() で手動で一回ぶん回す
+const tabsOf = gm => (gm.__tabs ||= new Set());
+async function boot(html, gm, opts = {}) {
+  const tab = { listeners: [] };
+  tabsOf(gm).add(tab);
+  // VirtualConsole を渡して location.reload の not-implemented を黙らせる
+  const dom = new JSDOM(html, { url: 'https://x.com/home', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: new VirtualConsole() });
+  const w = dom.window;
+  const menu = {}, posts = [], gets = [], writes = [], intervals = [], styles = [];
+  w.setInterval = fn => intervals.push(fn);
+  // 1 秒以上の setTimeout（通信の時間切れ）は実際には待たず、expire() で手動で発火させる
+  const longTimers = new Map(), realSet = w.setTimeout.bind(w), realClear = w.clearTimeout.bind(w);
+  let longId = 0;
+  w.setTimeout = (fn, ms, ...a) => (ms >= 1000 ? (longTimers.set(--longId, fn), longId) : realSet(fn, ms, ...a));
+  w.clearTimeout = id => (id < 0 ? longTimers.delete(id) : realClear(id));
+  if (opts.clock) w.Date.now = () => opts.clock.now;
+  // jsdom には innerText が無いので textContent で代用
+  Object.defineProperty(w.HTMLElement.prototype, 'innerText', { get() { return this.textContent; } });
+  Object.assign(w, {
+    GM_getValue: (k, d) => (gm.has(k) ? gm.get(k) : d),
+    GM_setValue: (k, v) => {
+      const old = gm.get(k);
+      gm.set(k, v);
+      writes.push(k);
+      if (old === v) return;
+      // 変更通知: 書いたタブには remote=false、他のタブには remote=true。非同期で届く
+      for (const t of tabsOf(gm)) for (const l of t.listeners) if (l.key === k) setTimeout(() => l.fn(k, old, v, t !== tab), 0);
+    },
+    ...(opts.noListener ? {} : { GM_addValueChangeListener: (key, fn) => tab.listeners.push({ key, fn }) }),
+    GM_addStyle: css => { styles.push(css); },
+    GM_registerMenuCommand: (n, f) => { menu[n] = f; },
+    // 戻り値の abort() を呼ぶと onabort が届く。呼ばれたかどうかは o.aborted に残す
+    GM_xmlhttpRequest: o => {
+      const handle = { abort: () => { o.aborted = true; setTimeout(() => o.onabort && o.onabort(), 0); } };
+      if (o.method === 'GET') {
+        gets.push(o);
+        const r = opts.remote && opts.remote();
+        if (r) setTimeout(() => {
+          if (r === 'error') o.onerror && o.onerror();
+          else if (r === 'timeout') o.ontimeout && o.ontimeout();
+          else o.onload && o.onload(r);
+        }, 5);
+        return handle;
+      }
+      if (o.method !== 'POST') return handle;
+      posts.push(o);
+      const p = opts.post;
+      setTimeout(() => {
+        if (p === 'ok') o.onload && o.onload({ status: 200 });
+        else if (typeof p === 'number') o.onload && o.onload({ status: p });
+        else if (p === 'error') o.onerror && o.onerror();
+        else if (p === 'timeout') o.ontimeout && o.ontimeout();
+      }, 10);
+      return handle;
+    },
+    unsafeWindow: { crypto: webcrypto },
+    TextEncoder,
+    confirm: () => true,
+    ...(opts.noInfo ? {} : { GM_info: { script: { version } } }),
+  });
+  if (!w.crypto || !w.crypto.randomUUID) Object.defineProperty(w, 'crypto', { value: webcrypto });
+  w.eval(code);
+  await sleep(80);
+  // within: 投稿を絞るセレクタ（例 '#a'）。省略するとページ全体
+  const btns = within => [...w.document.querySelectorAll(`${within ? within + ' ' : ''}.tg-btn`)];
+  const texts = within => btns(within).map(b => b.textContent);
+  const click = async (t, within) => {
+    const b = btns(within).find(x => x.textContent === t);
+    if (!b) throw new Error(`button not found: ${t} / have ${JSON.stringify(texts(within))}`);
+    b.click(); await sleep(80);
+  };
+  const close = () => { tabsOf(gm).delete(tab); };
+  const tick = async () => { intervals.forEach(fn => fn()); await sleep(80); };
+  const expire = async () => { const fns = [...longTimers.values()]; longTimers.clear(); fns.forEach(fn => fn()); await sleep(80); };
+  return { w, menu, posts, gets, writes, styles, texts, click, close, tick, expire, pendingTimers: () => longTimers.size, sleep };
+}
+
+let fails = 0;
+const check = (name, ok, extra) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra === undefined ? '' : '  → ' + (typeof extra === 'string' ? extra : JSON.stringify(extra))}`);
+  if (!ok) fails++;
+};
+const done = () => { console.log(fails ? `\n${fails} FAILED` : '\nALL PASS'); process.exit(fails ? 1 : 0); };
+const main = fn => fn().then(done).catch(e => { console.error(e); process.exit(2); });
+
+module.exports = { boot, check, main, code, version };

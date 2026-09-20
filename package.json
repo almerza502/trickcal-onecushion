@@ -1,0 +1,10 @@
+{
+  "name": "trickcal-cushion",
+  "private": true,
+  "scripts": {
+    "test": "node test/flow.js && node test/payload.js && node test/tabs.js && node test/remote.js && node test/reveal.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.0"
+  }
+}
