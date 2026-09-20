@@ -74,7 +74,9 @@ main(async () => {
   check('S2 表示済みの本文を押しても段階は進まず、X に届く', reached === true && state(t, '#both') === '28+text/1', [reached, state(t, '#both')]);
   const reached2 = await press(t, '#both', 'img');
   check('S3 画像を押すと表示。X には届かない', reached2 === false && state(t, '#both') === 'shown', [reached2, state(t, '#both')]);
-  check('S4 表示後のボタン', same(t.texts('#both'), ['報告', '先行版扱いを解除']), t.texts('#both'));
+  check('S4 表示後のボタン', same(t.texts('#both'), ['報告', '解除']), t.texts('#both'));
+  const un = [...t.w.document.querySelectorAll('#both .tg-btn')].find(b => b.textContent === '解除');
+  check('S5 短いラベルの全文は title と aria-label に入る', un.title === 'この端末の先行版扱いを解除する' && un.getAttribute('aria-label') === un.title, [un.title, un.getAttribute('aria-label')]);
   t.close();
 
   // 引用カードだけをぼかす場合も同じ段階
@@ -83,7 +85,8 @@ main(async () => {
   const out = [];
   for (let i = 0; i < 3; i++) { t.w.document.querySelector('#qbox [data-testid="tweetPhoto"] img').click(); await t.sleep(20); out.push(state(t, '#qbox')); }
   check('T2 引用カード・設定 3: 10 → 本文 → 表示', same(out, ['10/2', '10+text/1', 'shown']), out);
-  check('T3 表示後は「先行版扱いを解除」ボタン', same(t.texts('#quoting'), ['@tg_test_a の先行版扱いを解除']), t.texts('#quoting'));
+  check('T3 表示後は「解除」ボタン', same(t.texts('#quoting'), ['解除 @tg_test_a']), t.texts('#quoting'));
+  check('T4 ハンドル付きのボタンは title にもハンドルが入る', t.w.document.querySelector('#quoting .tg-btn').title === 'この端末の @tg_test_a の先行版扱いを解除する', t.w.document.querySelector('#quoting .tg-btn').title);
   t.close();
 
   // 途中経過は、全件の判定し直し（bump）をまたいで残る。表示済みも残る
@@ -93,7 +96,7 @@ main(async () => {
   await t.click('先行版扱い', '#other');    // 別の投稿の操作で全件を判定し直す
   check('U1 判定し直しても途中経過・表示済みが残る', state(t, '#both') === '10/2' && state(t, '#textonly') === 'shown' && state(t, '#other') === '28/2', [state(t, '#both'), state(t, '#textonly'), state(t, '#other')]);
   // そのアカウントを外して入れ直したら最初から
-  await t.click('先行版扱いを解除', '#both'); await t.click('先行版扱い', '#both');
+  await t.click('解除', '#both'); await t.click('先行版扱い', '#both');
   check('U2 登録し直すと最初から', state(t, '#both') === '28/3' && state(t, '#textonly') === '28/2', [state(t, '#both'), state(t, '#textonly')]);
 
   // 設定パネル

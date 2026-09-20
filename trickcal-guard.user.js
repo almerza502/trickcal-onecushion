@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.3.21
+// @version      0.3.22
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -349,10 +349,12 @@
     [data-tg-blur][data-tg-left]::after { content: '先行版の内容が含まれる可能性があります — あと ' attr(data-tg-left) ' 回クリックで表示'; }
     [data-tg-blur][data-tg-text]::after { top: 75%; }
     .tg-btn { font-size: 11px; opacity: .4; margin-left: 10px; background: none; border: 0;
-              color: inherit; cursor: pointer; font-family: inherit; padding: 0; white-space: nowrap; }
+              color: inherit; cursor: pointer; font-family: inherit; padding: 0; white-space: nowrap;
+              flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
     .tg-btn:hover { opacity: 1; }
     .tg-btn[disabled] { cursor: default; opacity: .6; }
     #tg-panel { position: fixed; top: 60px; right: 20px; z-index: 99999; width: 340px;
+      box-sizing: border-box; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto;
       background: #1e1e1e; color: #eee; border: 1px solid #555; border-radius: 8px;
       padding: 12px; font-size: 12px; font-family: system-ui, sans-serif; box-shadow: 0 4px 24px rgba(0,0,0,.5); }
     #tg-panel textarea { width: 100%; height: 90px; background: #111; color: #eee; border: 1px solid #444;
@@ -360,6 +362,17 @@
     #tg-panel label { display: block; margin: 6px 0 2px; }
     #tg-panel .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     #tg-panel button { cursor: pointer; white-space: nowrap; }
+    /* タッチ端末: 押しやすい大きさにし、文言を「タップ」にする */
+    @media (pointer: coarse) {
+      .tg-btn { font-size: 13px; padding: 8px 2px; opacity: .55; }
+      [data-tg-blur]::after { content: '先行版の内容が含まれる可能性があります — タップで表示'; }
+      [data-tg-blur][data-tg-left]::after { content: '先行版の内容が含まれる可能性があります — あと ' attr(data-tg-left) ' 回タップで表示'; }
+    }
+    /* 幅の狭い画面: ラベルは折り返し、設定パネルは画面幅に収める */
+    @media (max-width: 500px) {
+      [data-tg-blur]::after { white-space: normal; width: max-content; max-width: calc(100% - 32px); text-align: center; box-sizing: border-box; }
+      #tg-panel { top: 8px; left: 8px; right: 8px; width: auto; }
+    }
   `);
 
   // article に残す印（すべて data 属性 — React が触らない）
@@ -456,10 +469,11 @@
   //  投稿者の状態          | ボタン
   //  ----------------------|------------------------------------------
   //  未登録                | 先行版扱い            （RP・引用でぼかし中なら無し）
-  //  ローカルリスト        | 報告 / ✓ · 先行版扱いを解除
+  //  ローカルリスト        | 報告 / ✓ · 解除
   //  配布リスト            | （無し）
-  //  常に表示              | 先行版扱いに戻す
-  //  + このセッションで表示 | 根拠がローカルなら @x の先行版扱いを解除、配布リストなら @x を常に表示
+  //  常に表示              | 戻す
+  //  + このセッションで表示 | 根拠がローカルなら「解除 @x」、配布リストなら「常に表示 @x」（狭い画面では後ろが省略されるので動作を先に書く）
+  //  表示する文字は短くし、全文は title / aria-label に入れる
   function desiredButtons(article, p) {
     const out = [];
     if (!p.author) return out;
@@ -487,9 +501,9 @@
     report:   { text: '報告', title: '先行版の内容として報告する',
                 run: (a) => report(a) },
     reported: { text: '✓', title: '報告済み', disabled: true },
-    unlocal:  { text: '先行版扱いを解除', title: 'この端末の先行版扱いから外す',
+    unlocal:  { text: '解除', title: 'この端末の先行版扱いを解除する',
                 run: (a, p) => { edit(() => local.delete(p.author)); forgetRevealed(p.author); bump(); } },
-    restore:  { text: '先行版扱いに戻す', title: '「常に表示」を解除する',
+    restore:  { text: '戻す', title: '「常に表示」をやめて、通常の判定に戻す',
                 run: (a, p) => { edit(() => white.delete(p.author)); forgetRevealed(p.author); bump(); } },
   };
   function ensureButtons(article) {
@@ -507,14 +521,15 @@
       let spec;
       if (w.startsWith('white:')) {
         const h = w.slice(6);
-        spec = { text: `@${h} を常に表示`, title: 'この端末で常に表示する（配布リストの例外）',
+        spec = { text: `常に表示 @${h}`, title: `この端末で @${h} を常に表示する（配布リストの例外）`,
                  run: () => { edit(() => white.add(h)); bump(); } };
       } else if (w.startsWith('unlocal:')) {
         const h = w.slice(8);
-        spec = { text: `@${h} の先行版扱いを解除`, title: 'この端末の先行版扱いから外す',
+        spec = { text: `解除 @${h}`, title: `この端末の @${h} の先行版扱いを解除する`,
                  run: () => { edit(() => local.delete(h)); forgetRevealed(h); bump(); } };
       } else spec = BTN[w];
       b.textContent = spec.text; b.title = spec.title || '';
+      if (spec.title) b.setAttribute('aria-label', spec.title);   // 表示は短く、読み上げは title と同じ全文
       if (spec.disabled) b.disabled = true;
       else b.onclick = e => { e.stopPropagation(); e.preventDefault(); spec.run(article, p); };
       bar.appendChild(b);

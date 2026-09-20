@@ -24,7 +24,7 @@ main(async () => {
   s = await load(gm);
   check('A1 未登録は「先行版扱い」のみ', JSON.stringify(s.texts()) === '["先行版扱い"]', s.texts());
   await s.click('先行版扱い');
-  check('A2 ローカル登録後は 報告+解除', JSON.stringify(s.texts()) === '["報告","先行版扱いを解除"]', s.texts());
+  check('A2 ローカル登録後は 報告+解除', JSON.stringify(s.texts()) === '["報告","解除"]', s.texts());
   check('A2 ハンドルは小文字で保存', gm.get('tg_local') === '["tg_test_a"]', gm.get('tg_local'));
   await s.click('報告');
   check('A3 POST 1 件', s.posts.length === 1);

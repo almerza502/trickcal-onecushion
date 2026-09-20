@@ -39,7 +39,7 @@ main(async () => {
     // ── 2. 片方で解除したものを、もう片方の保存が復活させない
     gm = new Map([['tg_local', '["tg_test_a"]']]);
     t1 = await open(gm); t2 = await open(gm);
-    await t1.click('先行版扱いを解除', '#a');
+    await t1.click('解除', '#a');
     await t2.click('先行版扱い', '#b');
     check(`${tag}2 解除した A は戻らず、B だけ残る`, same(list(gm, 'tg_local'), ['tg_test_b']), gm.get('tg_local'));
     t1.close(); t2.close();
@@ -81,18 +81,18 @@ main(async () => {
   let gm = new Map();
   let t1 = await boot(HTML, gm, { post: 'ok' }), t2 = await boot(HTML, gm, { post: 'ok' });
   await t1.click('先行版扱い', '#a');
-  check('I1 登録がもう片方のタブでもぼかしになる', blurred(t2, '#a') && same(t2.texts('#a'), ['報告', '先行版扱いを解除']), [blurred(t2, '#a'), t2.texts('#a')]);
+  check('I1 登録がもう片方のタブでもぼかしになる', blurred(t2, '#a') && same(t2.texts('#a'), ['報告', '解除']), [blurred(t2, '#a'), t2.texts('#a')]);
   t2.w.document.querySelector('#a [data-testid="tweetText"]').click(); await t2.sleep(40);
   check('I2 t2 で表示にする', !blurred(t2, '#a'));
-  await t1.click('先行版扱いを解除', '#a');
+  await t1.click('解除', '#a');
   check('I3 解除も届く', same(t2.texts('#a'), ['先行版扱い']), t2.texts('#a'));
   await t1.click('先行版扱い', '#a');
   check('I4 登録し直すと、表示にしていたタブでも再びぼかす', blurred(t2, '#a'), blurred(t2, '#a'));
-  await t1.click('先行版扱いを解除', '#a');
+  await t1.click('解除', '#a');
   t1.menu['設定を開く']();
   t1.w.document.querySelector('#tg-white').value = 'tg_test_c';
   t1.w.document.querySelector('#tg-save').click(); await t1.sleep(80);
-  check('I5 パネルの保存も届く', same(t2.texts('#c'), ['先行版扱いに戻す']), t2.texts('#c'));
+  check('I5 パネルの保存も届く', same(t2.texts('#c'), ['戻す']), t2.texts('#c'));
   t1.menu['全データを初期化'](); await t1.sleep(80);
   check('I6 初期化も届く', same(t2.texts('#c'), ['先行版扱い']), t2.texts('#c'));
 });
