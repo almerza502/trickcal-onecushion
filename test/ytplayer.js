@@ -17,6 +17,8 @@ const gmOn = (clicks = 1) => new Map([['tg_cfg', JSON.stringify({ yt: true, clic
 const q = (t, sel) => t.w.document.querySelector(sel);
 const pl = (t, sel) => q(t, sel).getAttribute('data-tg-pl');
 const go = async (t, path) => { t.w.history.pushState({}, '', path); t.w.document.dispatchEvent(new t.w.Event('yt-navigate-finish')); await t.sleep(60); };
+// 再生が sec 秒まで進んだことにする
+const advance = async (t, v, sec) => { v.currentTime = sec; v.dispatchEvent(new t.w.Event('timeupdate')); await t.sleep(10); };
 const clickIn = async (t, sel) => {
   let reached = false; const on = () => { reached = true; };
   t.w.document.addEventListener('click', on, true); t.w.addEventListener('click', on, true);
@@ -33,7 +35,13 @@ main(async () => {
   check('P1 リストのチャンネルの動画は、プレーヤーにクッションを掛けて止める', pl(t, '#movie_player') === '2' && q(t, '#movie_player').getAttribute('data-tg-pl-name') === 'Test Channel A' && q(t, 'ytd-watch-metadata h1').hasAttribute('data-tg-pltitle') && !q(t, '#shorts-player').hasAttribute('data-tg-pl'), [pl(t, '#movie_player'), q(t, '#movie_player').getAttribute('data-tg-pl-name')]);
   check('P2 文言とぼかしの規則がある。隠されているプレーヤーも出す', /\[data-tg-pl\] > \* \{ filter: blur\(40px\)/.test(t.styles.join('\n')) && t.styles.join('\n').includes("'クリックで再生'") && /\[data-tg-pl\] \{[^}]*visibility: visible !important/.test(t.styles.join('\n')));
   await mv.play(); await t.sleep(20);
-  check('P3 クッションの間に再生が始まっても、すぐ止める', mv.paused === true && mv.__pauses >= 1, [mv.paused, mv.__pauses]);
+  check('P3a 始まったばかりの再生は止めない（止めると Shorts が次へ進めなくなる）。音だけ消す', mv.paused === false && mv.muted === true && !mv.__pauses, [mv.paused, mv.muted, mv.__pauses]);
+  await advance(t, mv, 0.1);
+  check('P3b 少し進んだだけではまだ止めない', mv.paused === false && mv.muted === true);
+  await advance(t, mv, 0.35);
+  check('P3c 再生が進み始めたら止めて、音を元に戻す', mv.paused === true && mv.muted === false && mv.__pauses === 1, [mv.paused, mv.muted, mv.__pauses]);
+  await mv.play(); await t.sleep(20);
+  check('P3d 途中から再生されたら、すぐ止める', mv.paused === true && mv.__pauses === 2, [mv.paused, mv.__pauses]);
   // 押下はページに渡さない
   let got = 0; const onDown = () => { got++; };
   t.w.document.addEventListener('mousedown', onDown, true);
@@ -53,14 +61,23 @@ main(async () => {
   await go(t, `/watch?v=${V.b}`);
   check('Q1 リストに無いチャンネルの動画には掛けない', !q(t, '[data-tg-pl]'));
   const sv = q(t, '#shorts-player video');
-  await sv.play();   // 前の動画から続けて再生している状態（自動再生・Shorts の送り）
+  await sv.play();   // 次の動画が始まった（currentTime は 0 から）
   await go(t, `/shorts/${V.a2}`);
-  check('Q2 再生したまま Shorts に移ってリストのチャンネルだったら、Shorts のプレーヤーに掛けて止める', pl(t, '#shorts-player') === '2' && q(t, 'yt-shorts-video-title-view-model').hasAttribute('data-tg-pltitle') && !q(t, '#movie_player').hasAttribute('data-tg-pl') && sv.paused === true && sv.__pauses >= 1, [pl(t, '#shorts-player'), sv.paused, sv.__pauses]);
+  check('Q2 Shorts の送りでリストのチャンネルの動画が始まったら、すぐぼかして音を消す（まだ止めない）', pl(t, '#shorts-player') === '2' && q(t, 'yt-shorts-video-title-view-model').hasAttribute('data-tg-pltitle') && !q(t, '#movie_player').hasAttribute('data-tg-pl') && sv.paused === false && sv.muted === true, [pl(t, '#shorts-player'), sv.paused, sv.muted]);
+  await advance(t, sv, 0.4);
+  check('Q2a 再生が進み始めたところで止める', sv.paused === true && sv.muted === false && sv.__pauses === 1, [sv.paused, sv.muted, sv.__pauses]);
   // 次の動画は、URL が変わるより先に同じ video 要素で再生が始まる（実際の順序）。クッションが残っている間なので一度止まる
-  await sv.play(); await t.sleep(10);
-  check('Q3a 準備: URL が変わる前に始まった次の動画の再生は、いったん止まる', sv.paused === true);
+  sv.currentTime = 0; await sv.play(); await t.sleep(10);
+  check('Q3a URL が変わる前に始まった次の動画は、止めずに音だけ消しておく', sv.paused === false && sv.muted === true, [sv.paused, sv.muted]);
   await go(t, `/shorts/${V.b}`);
-  check('Q3 次の Shorts がリストに無ければ外し、止めてしまった再生を戻す', !q(t, '[data-tg-pl]') && !q(t, '[data-tg-pltitle]') && sv.paused === false, [sv.paused]);
+  check('Q3 次の Shorts がリストに無ければ外す。再生は続き、音も戻る', !q(t, '[data-tg-pl]') && !q(t, '[data-tg-pltitle]') && sv.paused === false && sv.muted === false, [sv.paused, sv.muted]);
+  // URL が変わるのが遅れて、次の動画を止めてしまった場合は、移った後で再生を戻す
+  await go(t, `/shorts/${V.a2}`); await advance(t, sv, 0.4);
+  check('Q3b 準備: 掛かって止まっている', pl(t, '#shorts-player') === '2' && sv.paused === true);
+  sv.currentTime = 0; await sv.play(); await advance(t, sv, 0.4);
+  check('Q3c 準備: 次の動画が進んだところで止めてしまった', sv.paused === true);
+  await go(t, `/shorts/${V.b}`);
+  check('Q3d 移った先がリストに無ければ、止めてしまった再生を戻す', !q(t, '[data-tg-pl]') && sv.paused === false && sv.muted === false, [sv.paused, sv.muted]);
   await go(t, `/watch?v=${V.a}`);
   check('Q4 一度表示にした動画に戻っても掛けない', !q(t, '[data-tg-pl]'));
   await go(t, `/watch?v=${V.x}`);

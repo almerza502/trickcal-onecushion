@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.4.3
+// @version      0.4.4
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -758,14 +758,27 @@
     else { const m = location.pathname.match(/^\/shorts\/([\w-]{11})/); if (m) { kind = 'shorts'; id = m[1]; } }
     return /^[\w-]{11}$/.test(id) ? { kind, id, url: 'https://www.youtube.com/' + (kind === 'watch' ? 'watch?v=' : 'shorts/') + id } : null;
   }
+  // クッションの間、video を止めておく。止めたら true。
+  // 始まったばかり（currentTime がほぼ 0）のところで pause() すると、Shorts は「次へ」が効かなくなり、その動画から動けなくなる
+  // （再生が進み始めてから止めれば起きない）。そこで、まず音だけ消しておき、少し進んでから止める。見た目は最初からぼかしてある
+  const YT_HOLD_AFTER = 0.3;         // この秒数だけ再生が進んだら止める
+  const ytMuted = new WeakMap();     // 止めるまでの間だけ音を消した video -> 元の muted
+  function ytUnmute(v) { if (ytMuted.has(v)) { v.muted = ytMuted.get(v); ytMuted.delete(v); } }
+  function ytHold(v) {
+    if (v.paused) return false;
+    if (v.currentTime >= YT_HOLD_AFTER) { v.pause(); ytUnmute(v); return true; }
+    if (!ytMuted.has(v)) { ytMuted.set(v, v.muted); v.muted = true; }
+    return false;
+  }
   const ytGuarded = new WeakSet();
   function ytGuard(v) {
     if (ytGuarded.has(v)) return;
     ytGuarded.add(v);
-    // クッションの間は、ページ側やキー操作で再生が始まってもすぐ止める
-    const stop = () => { if (ytPl && v.closest('[data-tg-pl]')) { ytPl.guardAt = Date.now(); v.pause(); } };
+    // クッションの間は、ページ側やキー操作で再生が始まっても止める
+    const stop = () => { if (ytPl && v.closest('[data-tg-pl]') && ytHold(v)) ytPl.guardAt = Date.now(); };
     v.addEventListener('play', stop);
     v.addEventListener('playing', stop);
+    v.addEventListener('timeupdate', stop);
   }
   function ytPlayerApply() {
     const sel = YT.players[ytPl.kind];
@@ -774,12 +787,13 @@
     if (player.getAttribute('data-tg-pl') !== String(ytPl.left)) player.setAttribute('data-tg-pl', String(ytPl.left));
     if (player.getAttribute('data-tg-pl-name') !== ytPl.name) player.setAttribute('data-tg-pl-name', ytPl.name);
     for (const t of document.querySelectorAll(sel.title)) if (!t.hasAttribute('data-tg-pltitle')) t.setAttribute('data-tg-pltitle', '1');
-    for (const v of player.querySelectorAll('video')) { ytGuard(v); if (!v.paused) v.pause(); }
+    for (const v of player.querySelectorAll('video')) { ytGuard(v); ytHold(v); }
   }
   function ytPlayerClear() {
     ytPl = null;
     for (const el of document.querySelectorAll('[data-tg-pl]')) { el.removeAttribute('data-tg-pl'); el.removeAttribute('data-tg-pl-name'); }
     for (const el of document.querySelectorAll('[data-tg-pltitle]')) el.removeAttribute('data-tg-pltitle');
+    for (const v of document.querySelectorAll('video')) ytUnmute(v);
   }
   function ytPlayerClick() {
     const p = ytPl;
