@@ -141,6 +141,16 @@ main(async () => {
   t.w.document.querySelector('#tg-close').click();
   check('X3 閉じる', !t.w.document.querySelector('#tg-panel'));
   t.close();
+  // innerHTML への代入を受け付けないページでも、パネルが開いて保存できる
+  t = await boot(HTML, new Map([['tg_local', '["tg_test_a"]']]), {});
+  Object.defineProperty(t.w.Element.prototype, 'innerHTML', { configurable: true, get() { return ''; }, set() { throw new TypeError('innerHTML is blocked'); } });
+  t.menu['設定を開く']();
+  const p4 = t.w.document.querySelector('#tg-panel');
+  check('X4 innerHTML が使えなくてもパネルが開く', !!p4 && p4.querySelector('#tg-clicks').options.length === 5 && p4.querySelector('#tg-local').value === 'tg_test_a', p4 && p4.querySelector('#tg-local').value);
+  p4.querySelector('#tg-clicks').value = '3';
+  p4.querySelector('#tg-save').click(); await t.sleep(80);
+  check('X5 そのまま保存できる', state(t, '#both') === '28/3' && !t.w.document.querySelector('#tg-panel'), state(t, '#both'));
+  t.close();
 
   // 他のタブで設定を変えたら、こちらにも届く
   const gm = new Map([['tg_local', '["tg_test_a"]']]);

@@ -636,27 +636,33 @@
     const d = new Date(ts), p = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
+  // 要素を組み立てる。HTML 文字列は使わない（innerHTML への代入を受け付けないページでも動くように）
+  const h = (tag, props, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) { if (k === 'style') el.style.cssText = v; else el[k] = v; }
+    for (const kid of kids) if (kid != null && kid !== false) el.append(kid);
+    return el;
+  };
   function openPanel() {
     document.getElementById('tg-panel')?.remove();
-    const el = document.createElement('div');
-    el.id = 'tg-panel';
-    el.innerHTML = `
-      <b>もちもちワンクッション</b> <span style="opacity:.6">${VERSION ? 'v' + VERSION + ' · ' : ''}配布リスト ${DIST.size} 件 (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})</span>
-      <label><input type="checkbox" id="tg-dist"> 配布リストを使う</label>
-      <label><input type="checkbox" id="tg-cushion"> fusetter / poipiku / privatter リンクがある投稿はぼかさない</label>
-      <label>表示までのクリック数 <select id="tg-clicks">${[1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join('')}</select>
-        <span style="opacity:.6">2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる</span></label>
-      <label>先行版扱い（この端末のみ・1行1アカウント）</label><textarea id="tg-local"></textarea>
-      <label>常に表示（この端末のみ）</label><textarea id="tg-white"></textarea>
-      <div class="row">
-        <button id="tg-refresh">配布リストを今すぐ更新</button>
-        <button id="tg-reset-rep">報告履歴をクリア</button>
-        ${SEND_MODE === 'form' ? '' : '<button id="tg-pend">保留中の報告をコピー</button>'}
-      </div>
-      <div class="row">
-        <button id="tg-save">保存</button>
-        <button id="tg-close" style="margin-left:auto">閉じる</button>
-      </div>`;
+    const dim = text => h('span', { style: 'opacity:.6' }, text);
+    const el = h('div', { id: 'tg-panel' },
+      h('b', null, 'もちもちワンクッション'), ' ',
+      dim(`${VERSION ? 'v' + VERSION + ' · ' : ''}配布リスト ${DIST.size} 件 (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})`),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), ' 配布リストを使う'),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), ' fusetter / poipiku / privatter リンクがある投稿はぼかさない'),
+      h('label', null, '表示までのクリック数 ',
+        h('select', { id: 'tg-clicks' }, ...[1, 2, 3, 4, 5].map(n => h('option', null, String(n)))), ' ',
+        dim('2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる')),
+      h('label', null, '先行版扱い（この端末のみ・1行1アカウント）'), h('textarea', { id: 'tg-local' }),
+      h('label', null, '常に表示（この端末のみ）'), h('textarea', { id: 'tg-white' }),
+      h('div', { className: 'row' },
+        h('button', { id: 'tg-refresh' }, '配布リストを今すぐ更新'),
+        h('button', { id: 'tg-reset-rep' }, '報告履歴をクリア'),
+        SEND_MODE !== 'form' && h('button', { id: 'tg-pend' }, '保留中の報告をコピー')),
+      h('div', { className: 'row' },
+        h('button', { id: 'tg-save' }, '保存'),
+        h('button', { id: 'tg-close', style: 'margin-left:auto' }, '閉じる')));
     document.body.appendChild(el);
     pull();   // 他のタブの変更を反映してから表示する
     // 開いた時点の内容。保存のときは、ここから変えた分だけを最新の保存値に当てる
