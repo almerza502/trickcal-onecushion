@@ -20,6 +20,9 @@ const HTML = `<!doctype html><body>
   ${art('quoteListed', head('tg_test_u', 4) + text + quote('tg_test_l'))}
   ${art('listedQuotes', head('tg_test_l', 6) + text + quote('tg_test_u'))}
   ${art('plain',       head('tg_test_u', 5) + text)}
+  ${art('withCard',    head('tg_test_u', 7) + text + '<div data-testid="card.wrapper"><div role="group" class="cardgroup"><img></div></div>')}
+  <article data-testid="tweet" id="withReply">${head('tg_test_u', 8)}${text}<div data-testid="card.wrapper"><div role="group" class="cardgroup"></div></div>
+    <div role="group" class="bar"><button data-testid="reply"></button></div><div role="group" class="after"></div></article>
 </body>`;
 const blurred = (t, sel) => t.w.document.querySelector(sel).hasAttribute('data-tg-blur');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -38,6 +41,7 @@ main(async () => {
     const qText = t.w.document.querySelector('#listedQuotes .q [data-testid="tweetText"]');
     check(`${name}: リストのアカウントが引用した投稿は全体をぼかす（引用カードの中身も含む）`, blurred(t, '#listedQuotes') && !!qText.closest('[data-tg-blur]') && !blurred(t, '#listedQuotes .q'));
     check(`${name}: どちらにも関係ない投稿はそのまま`, !blurred(t, '#plain'));
+    check(`${name}: リンクカードの中の role="group" にはボタンを付けない（返信ボタンのある行か、カードの外の行に付ける）`, !t.w.document.querySelector('.cardgroup .tg-btn') && same(t.texts('#withCard'), ['先行版扱い']) && !!t.w.document.querySelector('#withReply .bar .tg-btn') && !t.w.document.querySelector('#withReply .after .tg-btn'), [t.texts('#withCard'), t.texts('#withReply')]);
     check(`${name}: リポストされただけの投稿には「先行版扱い」が出る（対象は投稿者）`, same(t.texts('#rpByListed'), ['先行版扱い']), t.texts('#rpByListed'));
     check(`${name}: 引用カードだけぼかしている投稿にも「先行版扱い」が出る（対象は投稿者）`, same(t.texts('#quoteListed'), ['先行版扱い']), t.texts('#quoteListed'));
     t.close();

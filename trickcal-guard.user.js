@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.4.4
+// @version      0.4.5
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -82,7 +82,8 @@
     photo:         '[data-testid="tweetPhoto"]',
     video:         '[data-testid="videoPlayer"]',
     card:          '[data-testid="card.wrapper"]',
-    actionBar:     '[role="group"]',                   // 返信・RP・いいねの行
+    actionBar:     '[role="group"]',                   // 返信・RP・いいねの行。リンクカードの中などにも同じ role の要素がある
+    reply:         '[data-testid="reply"]',            // 返信ボタン。これを含む role="group" が目的の行
     avatar:        '[data-testid="Tweet-User-Avatar"]',
     permalinkAnchor: 'a[href*="/status/"]',            // このうち <time> を含むものが本文のパーマリンク
     cushionLinks:  'a[href*="fusetter.com"], a[href*="poipiku.com"], a[href*="privatter.net"]',
@@ -580,8 +581,14 @@
     restore:  { text: '戻す', title: '「常に表示」をやめて、通常の判定に戻す',
                 run: (a, p) => { edit(() => white.delete(p.author)); forgetRevealed(p.author); bump(); } },
   };
+  // ボタンを付ける行。リンクカードや動画の中にも role="group" があり、そちらが先に見つかるので、返信ボタンのあるものを選ぶ。
+  // 返信ボタンが見つからないときは、画像・動画・カードの外にある最後のもの
+  function actionBarOf(article) {
+    const gs = [...article.querySelectorAll(SEL.actionBar)];
+    return gs.find(g => g.querySelector(SEL.reply)) || gs.filter(g => !g.closest(MEDIA_SEL)).pop() || null;
+  }
   function ensureButtons(article) {
-    const bar = article.querySelector(SEL.actionBar);
+    const bar = actionBarOf(article);
     if (!bar) return;
     const p = parts(article);
     const want = desiredButtons(article, p);
@@ -1052,7 +1059,7 @@
   // 2. SEL.userName — 名前ブロック内に a[href="/handle"] があるか。parts(article).author が null ならここ。
   // 3. SEL.socialContext — リポストの行。構造が変わると reposterOf の closest('a') が失敗する。
   // 4. SEL.quoteBox — 引用カードがまとめて拾えないなら role="link" が変わっている。
-  // 5. SEL.actionBar — ボタンが付かないならここ。
+  // 5. SEL.actionBar / SEL.reply — ボタンが付かないならここ。
   // 6. permalinkOf — <time> を含む a[href*="/status/"] が無いと id が null になり、セッション内の表示記憶が効かない。
   // 7. ぼかし対象(photo/video/card/tweetText)の data-testid が変わっていないか。
 })();
