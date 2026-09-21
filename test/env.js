@@ -16,15 +16,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // opts.noListener: GM_addValueChangeListener を定義しない（対応していない環境）
 // opts.remote: 配布リスト GET への応答を返す関数。{ status, responseText } | 'error' | 'timeout'。未指定なら応答なし
 // opts.clock : { now } を渡すとスクリプトから見える Date.now() がこの値になる
+// opts.url   : 開いているページの URL。未指定なら X
+// opts.oembed: 動画 ID を受けて oEmbed の応答を返す関数。ハンドルの文字列 | 'error' | 'hang'（応答なし） | <status 番号>。未指定なら通信エラー
 // スクリプトの setInterval は実際には動かさず、tick() で手動で一回ぶん回す
 const tabsOf = gm => (gm.__tabs ||= new Set());
 async function boot(html, gm, opts = {}) {
   const tab = { listeners: [] };
   tabsOf(gm).add(tab);
   // VirtualConsole を渡して location.reload の not-implemented を黙らせる
-  const dom = new JSDOM(html, { url: 'https://x.com/home', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: new VirtualConsole() });
+  const dom = new JSDOM(html, { url: opts.url || 'https://x.com/home', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: new VirtualConsole() });
   const w = dom.window;
-  const menu = {}, posts = [], gets = [], writes = [], intervals = [], styles = [];
+  const menu = {}, posts = [], gets = [], writes = [], intervals = [], styles = [], fetches = [];
+  // ページの fetch（YouTube の oEmbed だけが使う）
+  w.fetch = (url, init) => {
+    const id = (decodeURIComponent(url).match(/(?:v=|shorts\/)([\w-]{11})$/) || [])[1];
+    fetches.push({ url, id, init });
+    const r = opts.oembed ? opts.oembed(id) : 'error';
+    return new Promise((res, rej) => setTimeout(() => {
+      if (r === 'hang') return;
+      if (r === 'error') rej(new Error('network'));
+      else if (typeof r === 'number') res({ ok: false, status: r, json: async () => ({}) });
+      else res({ ok: true, status: 200, json: async () => ({ author_url: 'https://www.youtube.com/@' + r }) });
+    }, 5));
+  };
   w.setInterval = fn => intervals.push(fn);
   // 1 秒以上の setTimeout（通信の時間切れ）は実際には待たず、expire() で手動で発火させる
   const longTimers = new Map(), realSet = w.setTimeout.bind(w), realClear = w.clearTimeout.bind(w);
@@ -90,7 +104,7 @@ async function boot(html, gm, opts = {}) {
   const close = () => { tabsOf(gm).delete(tab); };
   const tick = async () => { intervals.forEach(fn => fn()); await sleep(80); };
   const expire = async () => { const fns = [...longTimers.values()]; longTimers.clear(); fns.forEach(fn => fn()); await sleep(80); };
-  return { w, menu, posts, gets, writes, styles, texts, click, close, tick, expire, pendingTimers: () => longTimers.size, sleep };
+  return { w, menu, posts, gets, writes, styles, fetches, texts, click, close, tick, expire, pendingTimers: () => longTimers.size, sleep };
 }
 
 let fails = 0;

@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.3.24
+// @version      0.4.0
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
 // @match        https://x.com/*
 // @match        https://twitter.com/*
+// @match        https://www.youtube.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
@@ -16,6 +17,7 @@
 // @grant        unsafeWindow
 // @connect      docs.google.com
 // @run-at       document-idle
+// @noframes
 // ==/UserScript==
 
 (() => {
@@ -34,6 +36,8 @@
   const log = (...a) => DEBUG && console.log('[tg]', ...a);
   // 設定パネルに出す版数。ヘッダの @version をそのまま使う（二重管理しない）
   const VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '';
+  // 動いているサイト。X と YouTube で違うのは、DOM の読み方・ぼかす対象・ボタンの置き場所だけ
+  const SITE = /(^|\.)youtube\.com$/.test(location.hostname) ? 'yt' : 'x';
 
   // Google フォーム: 「事前入力したリンクを取得」で entry.ID を確認して埋める
   const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdBFHFRtQcp1sBq49UNkYV_bTlpRrBPA7sIY5vSvJX0nc2jlQ/formResponse';
@@ -83,8 +87,26 @@
     permalinkAnchor: 'a[href*="/status/"]',            // このうち <time> を含むものが本文のパーマリンク
     cushionLinks:  'a[href*="fusetter.com"], a[href*="poipiku.com"], a[href*="privatter.net"]',
   };
+  // YouTube — カードの種類ごとに要素名が違う。DOM が変わったらここを見る
+  const YT = {
+    card:       'ytd-video-renderer, ytd-rich-grid-media, yt-lockup-view-model, ytm-shorts-lockup-view-model, ytd-compact-video-renderer, ytd-grid-video-renderer',
+    wrapper:    'ytd-rich-item-renderer',           // ホームの格子でカードを包む要素（hover はここに届くことがある）
+    videoLink:  'a[href^="/watch?v="], a[href^="/shorts/"]',
+    handleLink: 'a[href^="/@"]',                     // 無いカードもある（Shorts の棚・再生ページの横の一覧など）
+    channelName: 'ytd-channel-name',
+    text:       ['h3', '.metadata-snippet-container', '.metadata-snippet-container-one-line'],
+    media:      ['ytd-thumbnail', 'yt-thumbnail-view-model', 'ytd-expandable-metadata-renderer'],   // 最後はチャプターの行（サムネイルと文字が出る）
+  };
   const HANDLE_RE = /^\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/;
   const RESERVED = new Set(['home', 'explore', 'notifications', 'messages', 'i', 'search', 'settings', 'compose']);
+
+  // 要素を組み立てる。HTML 文字列は使わない（innerHTML への代入を受け付けないページでも動くように）
+  const h = (tag, props, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) { if (k === 'style') el.style.cssText = v; else el[k] = v; }
+    for (const kid of kids) if (kid != null && kid !== false) el.append(kid);
+    return el;
+  };
 
   // ────────────────────────────────────────────────────────────────
   // 2. ストレージ
@@ -96,8 +118,8 @@
   const asList = v => (Array.isArray(v) ? v : []);
   const asMap  = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});   // 配列だとキーが保存されないので捨てる
   const CLICKS_DEFAULT = 2;
-  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT };
-  const local = new Set();      // ユーザーが自分で追加したアカウント（小文字・平文）
+  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: false };
+  const local = new Set();      // ユーザーが自分で追加したアカウント（小文字・平文）。YouTube のチャンネルは 'yt:@ハンドル'
   const white = new Set();      // 常に表示
   const cfg = {};
   const reported = {};          // url -> ts
@@ -172,6 +194,7 @@
   }
   function fetchRemote(force) {
     if (!REMOTE_URL) return;
+    if (SITE === 'yt' && !cfg.yt) return;   // YouTube では、設定を入にするまで何もしない
     if (loadRemoteCache()) bump();   // 他のタブが先に更新していれば、取りに行かずそれを使う
     const now = Date.now();
     if (!force) {
@@ -325,9 +348,14 @@
     const k = Math.max(0, n - 2);
     return Array.from({ length: k + 1 }, (_, i) => Math.round(BLUR_MAX - (k ? (BLUR_MAX - BLUR_MIN) * i / k : 0)));
   };
-  const MEDIA_SEL = `${SEL.photo}, ${SEL.video}, ${SEL.card}`;
+  const TEXT_TARGETS = SITE === 'yt' ? YT.text : [SEL.tweetText];
+  const MEDIA_TARGETS = SITE === 'yt' ? YT.media : [SEL.photo, SEL.video, SEL.card];
+  const TEXT_SEL = TEXT_TARGETS.join(', ');
+  const MEDIA_SEL = MEDIA_TARGETS.join(', ');
   const under = (p, sels) => sels.map(x => `${p} ${x}`).join(', ');
-  const BLUR_TARGETS = [SEL.photo, SEL.tweetText, SEL.video, SEL.card];
+  const BLUR_TARGETS = [...MEDIA_TARGETS, ...TEXT_TARGETS];
+  // ぼかしの上に出す文言。YouTube のカードは小さいので説明を省く
+  const NOTE = SITE === 'yt' ? '' : '先行版の内容が含まれる可能性があります — ';
   const WEAKER = [...new Set([3, 4, 5].flatMap(blurLevels))].filter(v => v !== BLUR_MAX);
 
   GM_addStyle(`
@@ -341,14 +369,14 @@
     }
     ${WEAKER.map(v => `${under(`[data-tg-blur="${v}"]`, BLUR_TARGETS)} { filter: blur(${v}px); }`).join('\n    ')}
     /* 本文だけ先に表示した段階 */
-    [data-tg-blur][data-tg-text] ${SEL.tweetText} { filter: none; clip-path: none; user-select: auto; cursor: inherit; }
+    ${under('[data-tg-blur][data-tg-text]', TEXT_TARGETS)} { filter: none; clip-path: none; user-select: auto; cursor: inherit; }
     [data-tg-blur]::after {
-      content: '先行版の内容が含まれる可能性があります — クリックで表示';
+      content: '${NOTE}クリックで表示';
       position: absolute; left: 50%; top: 55%; transform: translate(-50%, -50%);
       background: rgba(0,0,0,.65); color: #fff; padding: 6px 12px; border-radius: 16px;
       font-size: 13px; white-space: nowrap; pointer-events: none; z-index: 3;
     }
-    [data-tg-blur][data-tg-left]::after { content: '先行版の内容が含まれる可能性があります — あと ' attr(data-tg-left) ' 回クリックで表示'; }
+    [data-tg-blur][data-tg-left]::after { content: '${NOTE}あと ' attr(data-tg-left) ' 回クリックで表示'; }
     [data-tg-blur][data-tg-text]::after { top: 75%; }
     .tg-btn { font-size: 11px; opacity: .4; margin-left: 10px; background: none; border: 0;
               color: inherit; cursor: pointer; font-family: inherit; padding: 0; white-space: nowrap;
@@ -364,11 +392,23 @@
     #tg-panel label { display: block; margin: 6px 0 2px; }
     #tg-panel .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     #tg-panel button { cursor: pointer; white-space: nowrap; }
+    /* YouTube: ボタンはカードの右下に重ねて置き、カーソルを乗せたときだけ見せる（カードの高さを変えない） */
+    [data-tg-card] { position: relative; }
+    .tg-row { position: absolute; right: 4px; bottom: 2px; z-index: 4; display: flex; gap: 10px; padding: 2px 8px;
+              border-radius: 10px; background: rgba(0,0,0,.7); opacity: 0; transition: opacity .1s; }
+    [data-tg-card]:hover > .tg-row, .tg-row:focus-within { opacity: 1; }
+    .tg-row .tg-btn { margin-left: 0; max-width: none; color: #fff; opacity: .85; }
+    ${SITE === 'yt' ? `[data-tg-blur]::after { top: 50%; font-size: 12px; white-space: normal; width: max-content;
+      max-width: calc(100% - 16px); text-align: center; box-sizing: border-box; }
+    /* サムネイルが左にある横長のカードは、文言をサムネイルの上（左寄せ）に置く */
+    ytd-video-renderer[data-tg-blur]::after, ytd-compact-video-renderer[data-tg-blur]::after,
+    yt-lockup-view-model[data-tg-blur]:has(> .ytLockupViewModelHorizontal)::after { left: 8px; transform: translateY(-50%); }` : ''}
     /* タッチ端末: 押しやすい大きさにし、文言を「タップ」にする */
     @media (pointer: coarse) {
       .tg-btn { font-size: 13px; padding: 8px 2px; opacity: .55; }
-      [data-tg-blur]::after { content: '先行版の内容が含まれる可能性があります — タップで表示'; }
-      [data-tg-blur][data-tg-left]::after { content: '先行版の内容が含まれる可能性があります — あと ' attr(data-tg-left) ' 回タップで表示'; }
+      .tg-row { opacity: .9; }
+      [data-tg-blur]::after { content: '${NOTE}タップで表示'; }
+      [data-tg-blur][data-tg-left]::after { content: '${NOTE}あと ' attr(data-tg-left) ' 回タップで表示'; }
     }
     /* 幅の狭い画面: ラベルは折り返し、設定パネルは画面幅に収める */
     @media (max-width: 500px) {
@@ -404,31 +444,36 @@
     if (total - step > 1) target.setAttribute('data-tg-left', String(total - step)); else target.removeAttribute('data-tg-left');
     return true;
   }
+  // 表示の記録に使う id。X は投稿の id、YouTube は動画 ID
+  const postIdOf = el => (SITE === 'yt' ? el.dataset.tgVid || null : idOf(permalinkOf(el)));
+  const refreshButtons = el => (SITE === 'yt' ? ytButtons(el) : ensureButtons(el));
   function reveal(article) {
     unblur(article);
     article.dataset.tgRevealed = '1';
-    const id = idOf(permalinkOf(article));
+    const id = postIdOf(article);
     if (id) { revealed.set(id, handlesOf(article)); steps.delete(id); }
-    ensureButtons(article);
+    refreshButtons(article);
+  }
+  function onBlurClick(article, e) {
+    const b = e.target.closest('[data-tg-blur]');
+    if (!b || !article.contains(b)) return;
+    // ぼかしている本文・画像・動画・カードを押したときだけ「表示」。
+    // それ以外（名前・…メニュー・アクションバー・余白）は X にそのまま渡す
+    const hit = e.target.closest(BLUR_TARGETS.join(', '));
+    if (!hit || !b.contains(hit)) return;
+    if (b.hasAttribute('data-tg-text') && hit.matches(TEXT_SEL) && !hit.closest(MEDIA_SEL)) return;   // 表示済みの本文は普通の本文として扱う
+    e.preventDefault(); e.stopPropagation();
+    if (SITE === 'yt') e.stopImmediatePropagation();   // YouTube 自身のクリック処理（動画への移動）を走らせない
+    const id = postIdOf(article);
+    const step = ((id && steps.get(id)?.step) || Number(b.dataset.tgStep) || 0) + 1;
+    if (!applyStep(b, step)) { reveal(article); return; }
+    b.dataset.tgStep = String(step);
+    if (id) steps.set(id, { step, hs: handlesOf(article) });
   }
   function attachClick(article) {
     if (article.dataset.tgClick) return;
     article.dataset.tgClick = '1';
-    article.addEventListener('click', e => {
-      const b = e.target.closest('[data-tg-blur]');
-      if (!b || !article.contains(b)) return;
-      // ぼかしている本文・画像・動画・カードを押したときだけ「表示」。
-      // それ以外（名前・…メニュー・アクションバー・余白）は X にそのまま渡す
-      const hit = e.target.closest(BLUR_TARGETS.join(', '));
-      if (!hit || !b.contains(hit)) return;
-      if (b.hasAttribute('data-tg-text') && hit.matches(SEL.tweetText)) return;   // 表示済みの本文は普通の本文として扱う
-      e.preventDefault(); e.stopPropagation();
-      const id = idOf(permalinkOf(article));
-      const step = ((id && steps.get(id)?.step) || Number(b.dataset.tgStep) || 0) + 1;
-      if (!applyStep(b, step)) { reveal(article); return; }
-      b.dataset.tgStep = String(step);
-      if (id) steps.set(id, { step, hs: handlesOf(article) });
-    }, true);
+    article.addEventListener('click', e => onBlurClick(article, e), true);
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -499,7 +544,7 @@
   }
   const BTN = {
     add:      { text: '先行版扱い', title: 'この端末で先行版扱いにする（送信しません）',
-                run: (a, p) => { edit(() => local.add(p.author)); forgetRevealed(p.author); forgetPost(idOf(p.link)); bump(); } },
+                run: (a, p) => { edit(() => local.add(p.author)); forgetRevealed(p.author); forgetPost(p.id || idOf(p.link)); bump(); } },
     report:  { text: '報告', title: '先行版の内容として報告する',
                 run: (a) => report(a) },
     reported: { text: '✓', title: '報告済み', disabled: true },
@@ -516,6 +561,11 @@
     const key = want.join(',');
     if (bar.dataset.tgBtns === key) return;
     bar.dataset.tgBtns = key;
+    fillButtons(bar, want, article, p);
+  }
+  // 表示用のハンドル。YouTube のキー 'yt:@name' は '@name' と出す
+  const atName = h => '@' + h.replace(/^yt:@/, '');
+  function fillButtons(bar, want, article, p) {
     bar.querySelectorAll('.tg-btn').forEach(b => b.remove());
     for (const w of want) {
       const b = document.createElement('button');
@@ -523,11 +573,11 @@
       let spec;
       if (w.startsWith('white:')) {
         const h = w.slice(6);
-        spec = { text: `常に表示 @${h}`, title: `この端末で @${h} を常に表示する（配布リストの例外）`,
+        spec = { text: `常に表示 ${atName(h)}`, title: `この端末で ${atName(h)} を常に表示する（配布リストの例外）`,
                  run: () => { edit(() => white.add(h)); bump(); } };
       } else if (w.startsWith('unlocal:')) {
         const h = w.slice(8);
-        spec = { text: `解除 @${h}`, title: `この端末の @${h} の先行版扱いを解除する`,
+        spec = { text: `解除 ${atName(h)}`, title: `この端末の ${atName(h)} の先行版扱いを解除する`,
                  run: () => { edit(() => local.delete(h)); forgetRevealed(h); bump(); } };
       } else spec = BTN[w];
       b.textContent = spec.text; b.title = spec.title || '';
@@ -536,6 +586,154 @@
       else b.onclick = e => { e.stopPropagation(); e.preventDefault(); spec.run(article, p); };
       bar.appendChild(b);
     }
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // 7y. YouTube — 動画のカード（検索結果・ホーム・再生ページの横の一覧・Shorts の棚）をチャンネル単位でぼかす
+  // ────────────────────────────────────────────────────────────────
+  // チャンネルのキーは 'yt:@' + ハンドル（小文字）。端末のリスト・常に表示・配布リストの照合は X と同じものを使う。
+  // カードに /@ハンドル のリンクがあればそれを使い、無ければ動画 ID から oEmbed で引く。
+  // 引いている間はぼかさない（結果がリストのチャンネルだったら、その時点でぼかす）
+  const ytNorm = s => { try { return decodeURIComponent(s).normalize('NFC').toLowerCase(); } catch { return ''; } };
+  function ytVideoOf(card) {
+    for (const a of card.querySelectorAll(YT.videoLink)) {
+      const m = a.getAttribute('href').match(/^\/(watch\?v=|shorts\/)([\w-]{11})/);
+      if (m) return { id: m[2], url: 'https://www.youtube.com/' + m[1] + m[2] };
+    }
+    return null;
+  }
+  function ytHandleOf(card) {
+    const a = card.querySelector(`${YT.channelName} ${YT.handleLink}`) || card.querySelector(YT.handleLink);
+    return a ? ytNorm(a.getAttribute('href').slice(2).split(/[/?#]/)[0]) : '';
+  }
+
+  // 動画 ID -> ハンドル。一度引いた結果は保存して使い回す（動画の持ち主は変わらない）
+  const YT_VID_MAX = 3000;     // 保存する件数の上限。超えたら古いものから捨てる
+  const YT_LOOKUP_MAX = 4;     // 同時に引く数
+  const ytVid = new Map(SITE === 'yt' ? Object.entries(asMap(store.get('tg_yt_vid', {}))) : []);
+  const ytInflight = new Map();
+  const ytQueue = []; let ytActive = 0, ytFlushTimer = 0;
+  function ytFlush() {
+    ytFlushTimer = 0;
+    // 他のタブが足した分を消さないよう、保存値に重ねてから書く
+    const all = { ...asMap(store.get('tg_yt_vid', {})), ...Object.fromEntries(ytVid) };
+    const keys = Object.keys(all);
+    for (const k of keys.slice(0, Math.max(0, keys.length - YT_VID_MAX))) delete all[k];
+    store.set('tg_yt_vid', all);
+  }
+  const ytPump = () => { while (ytActive < YT_LOOKUP_MAX && ytQueue.length) { ytActive++; ytQueue.shift()().finally(() => { ytActive--; ytPump(); }); } };
+  async function ytFetchHandle(v) {
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), REQ_TIMEOUT);
+    try {
+      // クッキーを付けない。返ってくる author_url が https://www.youtube.com/@ハンドル
+      const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(v.url), { credentials: 'omit', signal: ac.signal });
+      if (!r.ok) throw new Error('status ' + r.status);
+      const m = String((await r.json()).author_url || '').match(/\/@([^/?#]+)/);
+      return m ? ytNorm(m[1]) : '';
+    } catch (err) { log('lookup failed', v.id, err); return ''; }
+    finally { clearTimeout(timer); }
+  }
+  // 引けなかったときは ''（保存しない。そのカードはぼかさず、次に読み込んだときにまた引く）
+  function ytLookup(v) {
+    if (ytVid.has(v.id)) return Promise.resolve(ytVid.get(v.id));
+    let p = ytInflight.get(v.id);
+    if (!p) {
+      p = new Promise(res => {
+        ytQueue.push(() => ytFetchHandle(v).then(hd => {
+          if (hd) { ytVid.set(v.id, hd); ytInflight.delete(v.id); if (!ytFlushTimer) ytFlushTimer = setTimeout(ytFlush, 500); }
+          res(hd);
+        }));
+        ytPump();
+      });
+      ytInflight.set(v.id, p);
+    }
+    return p;
+  }
+
+  function ytClear(card) {
+    clearMarks(card);
+    for (const k of ['tgKey', 'tgVid', 'tgAuthor', 'tgCard']) delete card.dataset[k];
+    [...card.children].find(c => c.classList.contains('tg-row'))?.remove();
+  }
+  //  チャンネルの状態      | ボタン
+  //  ----------------------|------------------------------------------
+  //  未登録                | 先行版扱い
+  //  ローカルリスト        | 解除
+  //  配布リスト            | （無し）。表示した後は「常に表示 @x」
+  //  常に表示              | 戻す
+  //  チャンネルが分からない | （無し）
+  function ytDesired(card) {
+    const k = card.dataset.tgAuthor;
+    if (!k) return [];
+    const src = white.has(k) ? 'white' : local.has(k) ? 'local' : (card.dataset.tgSrc || '');
+    if (src === 'white') return ['restore'];
+    if (src === 'local') return ['unlocal'];
+    if (src === 'dist') return card.dataset.tgRevealed ? ['white:' + k] : [];
+    return card.hasAttribute('data-tg-blur') ? [] : ['add'];
+  }
+  function ytButtons(card) {
+    const want = cfg.yt ? ytDesired(card) : [];
+    let row = [...card.children].find(c => c.classList.contains('tg-row'));
+    if (!want.length) { row?.remove(); return; }
+    const key = want.join(',');
+    if (row && row.dataset.tgBtns === key) return;
+    if (!row) { row = h('div', { className: 'tg-row' }); card.appendChild(row); }   // YouTube が描き直して消したら、次の走査で付け直す
+    row.dataset.tgBtns = key;
+    fillButtons(row, want, card, { author: card.dataset.tgAuthor, id: card.dataset.tgVid });
+  }
+  async function ytEvaluate(card, v, key) {
+    clearMarks(card);
+    card.dataset.tgCard = '1';
+    card.dataset.tgVid = v.id;
+    card.dataset.tgAuthor = '';
+    ytButtons(card);   // 前の動画のボタンが残っていれば、チャンネルが分かるまで消しておく
+    const hd = ytHandleOf(card) || await ytLookup(v);
+    if (card.dataset.tgKey !== key) { log('stale, drop', v.id); return; }   // カードの要素は使い回される。待つ間に中身が変わっていたら捨てる
+    if (!hd) { ytButtons(card); return; }
+    const k = 'yt:@' + hd;
+    let listed = false, src = '';
+    try {
+      if (white.has(k)) { /* 常に表示 */ }
+      else if (local.has(k)) { listed = true; src = 'local'; }
+      else if (cfg.dist) { const hx = await hashOf(k); listed = !!hx && DIST.has(hx); if (listed) src = 'dist'; }
+    } catch (err) { console.error('[tg] evaluate failed', err); return; }
+    if (card.dataset.tgKey !== key) return;
+    card.dataset.tgAuthor = k;
+    card.dataset.tgSrc = src;
+    if (listed) {
+      card.dataset.tgHandles = JSON.stringify([k]);
+      if (revealed.has(v.id)) card.dataset.tgRevealed = '1';
+      else if (!applyStep(card, steps.get(v.id)?.step || 0)) reveal(card);
+    }
+    ytButtons(card);
+  }
+  function ytScan() {
+    for (const card of document.querySelectorAll(YT.card)) {
+      const v = cfg.yt ? ytVideoOf(card) : null;
+      if (!v) { if (card.dataset.tgKey) ytClear(card); continue; }
+      ytButtons(card);
+      const key = `${version}:${v.id}`;
+      if (card.dataset.tgKey === key) continue;
+      card.dataset.tgKey = key;
+      ytEvaluate(card, v, key);
+    }
+  }
+  if (SITE === 'yt') {
+    // YouTube のクリック処理より先に受けるため、window の capture で取る（document に付けると動画へ移動してしまう）
+    window.addEventListener('click', e => {
+      const card = e.target.closest?.(YT.card);
+      if (card) onBlurClick(card, e);
+    }, true);
+    // ぼかしている間は、カーソルを乗せたときの自動再生プレビューを始めさせない。
+    // プレビューはサムネイルではなくカード全体への hover で始まるので、ぼかしのあるカードは丸ごと止める
+    const onHover = e => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      const card = t.closest(YT.card);
+      if (card ? card.hasAttribute('data-tg-blur') : (t.matches(YT.wrapper) && t.querySelector('[data-tg-blur]'))) e.stopImmediatePropagation();
+    };
+    for (const type of ['mouseenter', 'mouseover', 'pointerenter', 'pointerover', 'mousemove', 'pointermove']) window.addEventListener(type, onHover, true);
+    document.addEventListener('yt-navigate-finish', () => scan());
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -581,6 +779,7 @@
   }
 
   function scan() {
+    if (SITE === 'yt') { ytScan(); return; }
     const arts = document.querySelectorAll(SEL.article);
     if (!arts.length) log('article 0 — check SEL.article');
     for (const a of arts) {
@@ -597,8 +796,10 @@
   new MutationObserver(() => {
     if (queued) return;
     queued = true;
-    requestAnimationFrame(() => { queued = false; scan(); });
-  }).observe(document.body, { childList: true, subtree: true });
+    const run = () => { queued = false; scan(); };
+    if (SITE === 'yt') setTimeout(run, 150); else requestAnimationFrame(run);   // YouTube は書き換えが多いので間隔を空ける
+    // YouTube はカードの要素を使い回し、リンク先だけを書き換えることがあるので href の変化も見る
+  }).observe(document.body, SITE === 'yt' ? { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] } : { childList: true, subtree: true });
   loadRemoteCache();
   scan();
   fetchRemote(false);
@@ -622,6 +823,7 @@
         if (l0.has(h) !== local.has(h) || w0.has(h) !== white.has(h)) forgetRevealed(h);
       }
       bump();
+      fetchRemote(false);
     }, 0);
   }
   if (typeof GM_addValueChangeListener === 'function') {
@@ -636,13 +838,6 @@
     const d = new Date(ts), p = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  // 要素を組み立てる。HTML 文字列は使わない（innerHTML への代入を受け付けないページでも動くように）
-  const h = (tag, props, ...kids) => {
-    const el = document.createElement(tag);
-    for (const [k, v] of Object.entries(props || {})) { if (k === 'style') el.style.cssText = v; else el[k] = v; }
-    for (const kid of kids) if (kid != null && kid !== false) el.append(kid);
-    return el;
-  };
   function openPanel() {
     document.getElementById('tg-panel')?.remove();
     const dim = text => h('span', { style: 'opacity:.6' }, text);
@@ -651,10 +846,11 @@
       dim(`${VERSION ? 'v' + VERSION + ' · ' : ''}配布リスト ${DIST.size} 件 (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})`),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), ' 配布リストを使う'),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), ' fusetter / poipiku / privatter リンクがある投稿はぼかさない'),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-yt' }), ' YouTube でも使う（動画のサムネイルとタイトルをぼかす）'),
       h('label', null, '表示までのクリック数 ',
         h('select', { id: 'tg-clicks' }, ...[1, 2, 3, 4, 5].map(n => h('option', null, String(n)))), ' ',
         dim('2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる')),
-      h('label', null, '先行版扱い（この端末のみ・1行1アカウント）'), h('textarea', { id: 'tg-local' }),
+      h('label', null, '先行版扱い（この端末のみ・1行1アカウント） ', dim('YouTube は yt:@ハンドル')), h('textarea', { id: 'tg-local' }),
       h('label', null, '常に表示（この端末のみ）'), h('textarea', { id: 'tg-white' }),
       h('div', { className: 'row' },
         h('button', { id: 'tg-refresh' }, '配布リストを今すぐ更新'),
@@ -669,26 +865,30 @@
     const l0 = new Set(local), w0 = new Set(white), c0 = { ...cfg }, k0 = clicksOf();
     el.querySelector('#tg-dist').checked = cfg.dist;
     el.querySelector('#tg-cushion').checked = cfg.cushion;
+    el.querySelector('#tg-yt').checked = !!cfg.yt;
     el.querySelector('#tg-clicks').value = String(clicksOf());
     el.querySelector('#tg-local').value = [...local].join('\n');
     el.querySelector('#tg-white').value = [...white].join('\n');
-    const lines = v => v.split(/\s+/).map(s => s.replace(/^@/, '').toLowerCase()).filter(s => /^[a-z0-9_]{1,15}$/.test(s));
+    // X のハンドルか、YouTube のキー（yt:@ハンドル）
+    const lines = v => v.split(/\s+/).map(s => s.replace(/^@/, '').normalize('NFC').toLowerCase()).filter(s => /^[a-z0-9_]{1,15}$/.test(s) || /^yt:@[^\s/?#@]{1,80}$/.test(s));
     const applyDiff = (set, was, now) => {
       for (const h of was) if (!now.has(h)) { set.delete(h); forgetRevealed(h); }
       for (const h of now) if (!was.has(h)) { set.add(h); forgetRevealed(h); }
     };
     el.querySelector('#tg-save').onclick = () => {
-      const dist = el.querySelector('#tg-dist').checked, cushion = el.querySelector('#tg-cushion').checked;
+      const dist = el.querySelector('#tg-dist').checked, cushion = el.querySelector('#tg-cushion').checked, yt = el.querySelector('#tg-yt').checked;
       const clicks = Number(el.querySelector('#tg-clicks').value), n0 = clicksOf();
       const l1 = new Set(lines(el.querySelector('#tg-local').value)), w1 = new Set(lines(el.querySelector('#tg-white').value));
       edit(() => {
         if (dist !== c0.dist) cfg.dist = dist;
         if (cushion !== c0.cushion) cfg.cushion = cushion;
+        if (yt !== !!c0.yt) cfg.yt = yt;
         if (clicks !== k0) cfg.clicks = clicks;
         applyDiff(local, l0, l1); applyDiff(white, w0, w1);
       });
       if (clicksOf() !== n0) steps.clear();   // 段階の数が変わったら、途中まで押した記録は最初から
       bump(); el.remove();
+      fetchRemote(false);   // YouTube を入にした直後など。期限内なら何もしない
     };
     el.querySelector('#tg-refresh').onclick = () => { fetchRemote(true); el.remove(); };
     el.querySelector('#tg-reset-rep').onclick = () => {
@@ -707,7 +907,7 @@
   GM_registerMenuCommand('全データを初期化', () => {
     if (!confirm('ローカルのリスト・報告履歴をすべて削除します。よろしいですか？')) return;
     // 空の値はキーごとに型を合わせる（tg_reported を配列にすると、以後の報告履歴が保存されなくなる）
-    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null' };
+    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}' };
     for (const [k, v] of Object.entries(empty)) GM_setValue(k, v);
     GM_setValue('tg_remote_next', 0);
     GM_setValue('tg_remote_busy', 0);
