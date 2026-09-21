@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.4.5
+// @version      0.4.6
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -389,6 +389,16 @@
               color: inherit; cursor: pointer; font-family: inherit; padding: 0; white-space: nowrap;
               flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
     .tg-btn:hover { opacity: 1; }
+    /* ボタンの入れ物。普段は無いものとして扱い、ボタンが返信・いいねの行にそのまま並ぶ */
+    .tg-wrap { display: contents; }
+    /* 幅の狭い画面のタイムライン: 投稿の左下、アイコンの列（左 16px・幅 40px）の下に縦に並べる。
+       入れ物の高さは投稿に合わせて伸び（上限あり）、二つあるときは上と下に離す。短い投稿では詰まる */
+    .tg-wrap.tg-side { position: absolute; left: 16px; bottom: 4px; width: 40px; height: min(calc(100% - 58px), 76px);
+      display: flex; flex-direction: column; justify-content: flex-end; align-items: center; z-index: 1; pointer-events: none; }
+    .tg-side .tg-btn { pointer-events: auto; margin: 0; max-width: none; width: 100%; max-height: 48px; white-space: normal;
+      word-break: keep-all; overflow-wrap: anywhere; text-align: center; line-height: 14px; padding: 3px 0; font-size: 11px; opacity: .6;
+      background: var(--tg-bg, transparent); }   /* スレッドの縦線の上でも読めるよう、ページの背景色を敷く */
+    .tg-side .tg-btn:first-child:not(:last-child) { margin-bottom: auto; }
     .tg-btn[disabled] { cursor: default; opacity: .6; }
     #tg-panel { position: fixed; top: 60px; right: 20px; z-index: 99999; width: 340px;
       box-sizing: border-box; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto;
@@ -571,7 +581,8 @@
     return out;
   }
   const BTN = {
-    add:      { text: '先行版扱い', title: 'この端末で先行版扱いにする（送信しません）',
+    // sideText: 幅の狭い画面で投稿の左下に置くときの文字。幅 40px に収まらないので、折り返してよい位置（ゼロ幅スペース）を入れる
+    add:      { text: '先行版扱い', sideText: '先行版\u200B扱い', title: 'この端末で先行版扱いにする（送信しません）',
                 run: (a, p) => { edit(() => local.add(p.author)); forgetRevealed(p.author); forgetPost(p.id || idOf(p.link)); bump(); } },
     report:  { text: '報告', title: '先行版の内容として報告する',
                 run: (a) => report(a) },
@@ -587,16 +598,30 @@
     const gs = [...article.querySelectorAll(SEL.actionBar)];
     return gs.find(g => g.querySelector(SEL.reply)) || gs.filter(g => !g.closest(MEDIA_SEL)).pop() || null;
   }
+  // 幅の狭い画面（スマートフォン）のタイムラインでは、返信・いいねの行に空きが無い。
+  // そのときは投稿の左下（アイコンの列の下の空いている所）に縦に並べる。絶対配置なので投稿の高さは変わらない。
+  // 行の中に置いたまま位置だけ左へ出すと、途中の要素に切り取られて見えないので、投稿の要素に直接付ける。
+  // 個別ページの本文の投稿（tabindex="-1"）にはアイコンの列が無く、行にも空きがあるので、行の中に置く
+  const NARROW = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 500px)') : null;
   function ensureButtons(article) {
     const bar = actionBarOf(article);
     if (!bar) return;
     const p = parts(article);
     const want = desiredButtons(article, p);
-    const key = want.join(',');
-    if (bar.dataset.tgBtns === key) return;
-    bar.dataset.tgBtns = key;
-    fillButtons(bar, want, article, p);
+    const side = !!(NARROW && NARROW.matches) && article.getAttribute('tabindex') === '0';
+    const host = side ? article : bar;
+    const key = (side ? 'side:' : 'bar:') + want.join(',');
+    let wrap = article.querySelector('.tg-wrap');
+    if (!want.length) { wrap?.remove(); return; }
+    if (wrap && wrap.dataset.tgBtns === key && wrap.parentElement === host) return;
+    if (!wrap) wrap = h('span', { className: 'tg-wrap' });
+    if (wrap.parentElement !== host) host.appendChild(wrap);
+    wrap.dataset.tgBtns = key;
+    wrap.classList.toggle('tg-side', side);
+    fillButtons(wrap, want, article, p);
   }
+  // 画面の幅が境をまたいだら（回転・ウィンドウの大きさ変更）、置き場所を決め直す
+  if (NARROW && NARROW.addEventListener) NARROW.addEventListener('change', () => { document.querySelectorAll('.tg-wrap').forEach(w => w.remove()); scan(); });
   // 表示用のハンドル。YouTube のキー 'yt:@name' は '@name' と出す
   const atName = h => '@' + h.replace(/^yt:@/, '');
   function fillButtons(bar, want, article, p) {
@@ -614,7 +639,7 @@
         spec = { text: `解除 ${atName(h)}`, title: `この端末の ${atName(h)} の先行版扱いを解除する`,
                  run: () => { edit(() => local.delete(h)); forgetRevealed(h); bump(); } };
       } else spec = BTN[w];
-      b.textContent = spec.text; b.title = spec.title || '';
+      b.textContent = (bar.classList.contains('tg-side') && spec.sideText) || spec.text; b.title = spec.title || '';
       if (spec.title) b.setAttribute('aria-label', spec.title);   // 表示は短く、読み上げは title と同じ全文
       if (spec.disabled) b.disabled = true;
       else b.onclick = e => { e.stopPropagation(); e.preventDefault(); spec.run(article, p); };
@@ -927,7 +952,9 @@
       evaluate(a);
     }
   }
-  function bump() { version++; scan(); }
+  // 左下のボタンの下に敷く色。X のテーマ（白・薄暗い・黒）で変わるので、リストを判定し直すたびに読み直す
+  const syncTheme = () => { if (SITE === 'x' && document.body) document.documentElement.style.setProperty('--tg-bg', getComputedStyle(document.body).backgroundColor); };
+  function bump() { version++; syncTheme(); scan(); }
 
   let queued = false;
   new MutationObserver(() => {
@@ -938,6 +965,7 @@
     // YouTube はカードの要素を使い回し、リンク先だけを書き換えることがあるので href の変化も見る
   }).observe(document.body, SITE === 'yt' ? { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] } : { childList: true, subtree: true });
   loadRemoteCache();
+  syncTheme();
   scan();
   fetchRemote(false);
   // X は SPA で、タブを何日も開いたままにできる。読込時だけでなく、定期的に・タブに戻ってきたときにも期限を確かめる

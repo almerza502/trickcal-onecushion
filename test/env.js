@@ -17,6 +17,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // opts.remote: 配布リスト GET への応答を返す関数。{ status, responseText } | 'error' | 'timeout'。未指定なら応答なし
 // opts.clock : { now } を渡すとスクリプトから見える Date.now() がこの値になる
 // opts.url   : 開いているページの URL。未指定なら X
+// opts.narrow: { matches } を渡すと matchMedia('(max-width: 500px)') の結果になる。narrow.set(v) で切り替えて change を届ける
 // opts.oembed: 動画 ID を受けて oEmbed の応答を返す関数。ハンドルの文字列（'ハンドル|表示名' も可） | 'error' | 'hang'（応答なし） | <status 番号>。未指定なら通信エラー
 // スクリプトの setInterval は実際には動かさず、tick() で手動で一回ぶん回す
 const tabsOf = gm => (gm.__tabs ||= new Set());
@@ -46,6 +47,12 @@ async function boot(html, gm, opts = {}) {
   w.setTimeout = (fn, ms, ...a) => (ms >= 1000 ? (longTimers.set(--longId, fn), longId) : realSet(fn, ms, ...a));
   w.clearTimeout = id => (id < 0 ? longTimers.delete(id) : realClear(id));
   if (opts.clock) w.Date.now = () => opts.clock.now;
+  if (opts.narrow) {
+    const ls = [];
+    const mql = { get matches() { return !!opts.narrow.matches; }, addEventListener: (t, fn) => ls.push(fn) };
+    opts.narrow.set = v => { opts.narrow.matches = v; ls.forEach(fn => fn({ matches: v })); };
+    w.matchMedia = () => mql;
+  }
   // jsdom の video は再生できないので、play / pause / paused を簡単なもので置き換える（呼ばれた回数は el.__plays / el.__pauses）
   Object.defineProperty(w.HTMLMediaElement.prototype, 'paused', { configurable: true, get() { return this.__playing !== true; } });
   w.HTMLMediaElement.prototype.play = function () { this.__plays = (this.__plays || 0) + 1; this.__playing = true; this.dispatchEvent(new w.Event('play')); return Promise.resolve(); };
@@ -99,9 +106,11 @@ async function boot(html, gm, opts = {}) {
   await sleep(80);
   // within: 投稿を絞るセレクタ（例 '#a'）。省略するとページ全体
   const btns = within => [...w.document.querySelectorAll(`${within ? within + ' ' : ''}.tg-btn`)];
-  const texts = within => btns(within).map(b => b.textContent);
+  // 折り返し位置の印（ゼロ幅スペース）は、見た目に出ないので比べるときは除く
+  const label = b => b.textContent.replace(/\u200B/g, '');
+  const texts = within => btns(within).map(label);
   const click = async (t, within) => {
-    const b = btns(within).find(x => x.textContent === t);
+    const b = btns(within).find(x => label(x) === t);
     if (!b) throw new Error(`button not found: ${t} / have ${JSON.stringify(texts(within))}`);
     b.click(); await sleep(80);
   };
