@@ -85,8 +85,20 @@ main(async () => {
   const out = [];
   for (let i = 0; i < 3; i++) { t.w.document.querySelector('#qbox [data-testid="tweetPhoto"] img').click(); await t.sleep(20); out.push(state(t, '#qbox')); }
   check('T2 引用カード・設定 3: 10 → 本文 → 表示', same(out, ['10/2', '10+text/1', 'shown']), out);
-  check('T3 表示後は「解除」ボタン', same(t.texts('#quoting'), ['解除 @tg_test_a']), t.texts('#quoting'));
-  check('T4 ハンドル付きのボタンは title にもハンドルが入る', t.w.document.querySelector('#quoting .tg-btn').title === 'この端末の @tg_test_a の先行版扱いを解除する', t.w.document.querySelector('#quoting .tg-btn').title);
+  check('T3 表示後は投稿者の「先行版扱い」と、引用元の「解除」', same(t.texts('#quoting'), ['先行版扱い', '解除 @tg_test_a']), t.texts('#quoting'));
+  const unq = [...t.w.document.querySelectorAll('#quoting .tg-btn')].find(b => b.textContent.startsWith('解除 @'));
+  check('T4 ハンドル付きのボタンは title にもハンドルが入る', unq.title === 'この端末の @tg_test_a の先行版扱いを解除する', unq.title);
+  // 引用カードを表示した後に投稿者を先行版扱いにしたら、投稿全体を最初からぼかす
+  await t.click('先行版扱い', '#quoting');
+  check('T5 表示済みの引用カードがあっても、投稿全体を最初からぼかす', state(t, '#quoting') === '28/3' && state(t, '#qbox') === 'shown', [state(t, '#quoting'), state(t, '#qbox')]);
+  check('T6 ボタンは投稿者のものに変わる', same(t.texts('#quoting'), ['報告', '解除']), t.texts('#quoting'));
+  t.close();
+  // 引用カードを途中まで押した状態でも同じ
+  t = await open(3);
+  check('T7 表示前から投稿者の「先行版扱い」が出る', same(t.texts('#quoting'), ['先行版扱い']), t.texts('#quoting'));
+  t.w.document.querySelector('#qbox [data-testid="tweetPhoto"] img').click(); await t.sleep(20);
+  await t.click('先行版扱い', '#quoting');
+  check('T8 途中経過は引き継がない', state(t, '#quoting') === '28/3' && state(t, '#qbox') === 'shown', [state(t, '#quoting'), state(t, '#qbox')]);
   t.close();
 
   // 途中経過は、全件の判定し直し（bump）をまたいで残る。表示済みも残る

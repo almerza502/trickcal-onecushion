@@ -39,6 +39,7 @@ main(async () => {
     check(`${name}: リストのアカウントが引用した投稿は全体をぼかす（引用カードの中身も含む）`, blurred(t, '#listedQuotes') && !!qText.closest('[data-tg-blur]') && !blurred(t, '#listedQuotes .q'));
     check(`${name}: どちらにも関係ない投稿はそのまま`, !blurred(t, '#plain'));
     check(`${name}: リポストされただけの投稿には「先行版扱い」が出る（対象は投稿者）`, same(t.texts('#rpByListed'), ['先行版扱い']), t.texts('#rpByListed'));
+    check(`${name}: 引用カードだけぼかしている投稿にも「先行版扱い」が出る（対象は投稿者）`, same(t.texts('#quoteListed'), ['先行版扱い']), t.texts('#quoteListed'));
     t.close();
   }
 
@@ -51,4 +52,9 @@ main(async () => {
   await t.click('先行版扱い', '#plain');       // tg_test_u を端末のリストに入れる
   check('投稿者を入れると、その人の投稿はぼかす', blurred(t, '#plain') && blurred(t, '#rpByListed'));
   check('その人がリポストしただけの投稿（投稿者は別）は、投稿者で決まる', blurred(t, '#rpOfListed'));
+  check('その人が引用していた投稿は、引用カードだけでなく全体をぼかす', blurred(t, '#quoteListed') && !blurred(t, '#quoteListed .q') && same(t.texts('#quoteListed'), ['報告', '解除']), t.texts('#quoteListed'));
+  // 引用した投稿の報告: user は投稿者。引用元の本文は [引用 @…] として付く
+  await t.click('報告', '#quoteListed');
+  const q2 = new URLSearchParams(t.posts[1].data);
+  check('報告: 引用した投稿の user は投稿者、本文に引用元が付く', q2.get('entry.2120562442') === 'tg_test_u' && q2.get('entry.1290347790').includes('[引用 @tg_test_l]'), [q2.get('entry.2120562442'), q2.get('entry.1290347790')]);
 });

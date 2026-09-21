@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.3.23
+// @version      0.3.24
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -135,6 +135,8 @@
     for (const [id, hs] of revealed) if (hs.includes(h)) revealed.delete(id);
     for (const [id, v] of steps) if (v.hs.includes(h)) steps.delete(id);
   };
+  // その投稿の途中経過・表示済みを消す（引用カードだけ表示していた投稿の投稿者を、先行版扱いにしたとき）
+  const forgetPost = id => { if (id) { revealed.delete(id); steps.delete(id); } };
   let version = 0;              // リストが変わったら上げて全件を再判定
 
   // ────────────────────────────────────────────────────────────────
@@ -468,7 +470,7 @@
   // ────────────────────────────────────────────────────────────────
   //  投稿者の状態          | ボタン
   //  ----------------------|------------------------------------------
-  //  未登録                | 先行版扱い            （引用でぼかし中なら無し）
+  //  未登録                | 先行版扱い            （引用カードだけぼかしている投稿にも出す。対象は投稿者）
   //  ローカルリスト        | 報告 / ✓ · 解除
   //  配布リスト            | （無し）
   //  常に表示              | 戻す
@@ -484,7 +486,7 @@
     if (src === 'white')      out.push('restore');
     else if (src === 'local') out.push(p.link && reported[p.link] ? 'reported' : 'report', 'unlocal');
     else if (src === 'dist')  { /* 既に配布リストにある — 何もしない */ }
-    else if (!blurred && !hs.length) out.push('add');
+    else if (!blurred) out.push('add');
     // 表示後: 根拠がローカルなら「解除」、配布リストなら「常に表示」 — アカウントごとに一つだけ
     if (article.dataset.tgRevealed) {
       for (const h of hs) {
@@ -497,8 +499,8 @@
   }
   const BTN = {
     add:      { text: '先行版扱い', title: 'この端末で先行版扱いにする（送信しません）',
-                run: (a, p) => { edit(() => local.add(p.author)); forgetRevealed(p.author); bump(); } },
-    report:   { text: '報告', title: '先行版の内容として報告する',
+                run: (a, p) => { edit(() => local.add(p.author)); forgetRevealed(p.author); forgetPost(idOf(p.link)); bump(); } },
+    report:  { text: '報告', title: '先行版の内容として報告する',
                 run: (a) => report(a) },
     reported: { text: '✓', title: '報告済み', disabled: true },
     unlocal:  { text: '解除', title: 'この端末の先行版扱いを解除する',
