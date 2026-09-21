@@ -18,6 +18,7 @@ const HTML = `<!doctype html><body>
   ${art('rpOfListed',  rp('tg_test_u') + head('tg_test_l', 2) + text)}
   ${art('byListed',    head('tg_test_l', 3) + text)}
   ${art('quoteListed', head('tg_test_u', 4) + text + quote('tg_test_l'))}
+  ${art('listedQuotes', head('tg_test_l', 6) + text + quote('tg_test_u'))}
   ${art('plain',       head('tg_test_u', 5) + text)}
 </body>`;
 const blurred = (t, sel) => t.w.document.querySelector(sel).hasAttribute('data-tg-blur');
@@ -33,6 +34,9 @@ main(async () => {
     check(`${name}: リストのアカウントの投稿は、誰がリポストしてもぼかす`, blurred(t, '#rpOfListed'));
     check(`${name}: リストのアカウントの投稿はぼかす`, blurred(t, '#byListed'));
     check(`${name}: リストのアカウントを引用した投稿は、引用カードだけぼかす`, !blurred(t, '#quoteListed') && blurred(t, '#quoteListed .q'));
+    // リストのアカウントが誰かを引用した投稿: 投稿全体がぼかしの対象で、引用カードの本文もその中に入る
+    const qText = t.w.document.querySelector('#listedQuotes .q [data-testid="tweetText"]');
+    check(`${name}: リストのアカウントが引用した投稿は全体をぼかす（引用カードの中身も含む）`, blurred(t, '#listedQuotes') && !!qText.closest('[data-tg-blur]') && !blurred(t, '#listedQuotes .q'));
     check(`${name}: どちらにも関係ない投稿はそのまま`, !blurred(t, '#plain'));
     check(`${name}: リポストされただけの投稿には「先行版扱い」が出る（対象は投稿者）`, same(t.texts('#rpByListed'), ['先行版扱い']), t.texts('#rpByListed'));
     t.close();
