@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.3.22
+// @version      0.3.23
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -468,7 +468,7 @@
   // ────────────────────────────────────────────────────────────────
   //  投稿者の状態          | ボタン
   //  ----------------------|------------------------------------------
-  //  未登録                | 先行版扱い            （RP・引用でぼかし中なら無し）
+  //  未登録                | 先行版扱い            （引用でぼかし中なら無し）
   //  ローカルリスト        | 報告 / ✓ · 解除
   //  配布リスト            | （無し）
   //  常に表示              | 戻す
@@ -558,14 +558,16 @@
       if (white.has(p.author)) { ha = false; }
       else if (local.has(p.author)) { ha = true; src = 'local'; }
       else if (cfg.dist) { const hx = await hashOf(p.author); ha = !!hx && DIST.has(hx); if (ha) src = 'dist'; }
-      var [hr, hq] = await Promise.all([isListed(p.reposter), isListed(p.quoted)]);
+      // 判定に使うのは、その投稿を書いたアカウント（と、引用カードを書いたアカウント）だけ。
+      // リストにあるアカウントがリポストしただけの投稿はぼかさない
+      var hq = await isListed(p.quoted);
     } catch (err) { console.error('[tg] evaluate failed', err); return; }
-    log({ id, author: p.author, reposter: p.reposter, quoted: p.quoted, ha, hr, hq, src });
+    log({ id, author: p.author, reposter: p.reposter, quoted: p.quoted, ha, hq, src });
     // 非同期の間にリストが変わったか、ノードが再利用されていたら捨てる
     if (article.dataset.tgKey !== `${version}:${id}`) { log('stale, drop', id); return; }
 
     article.dataset.tgSrc = src;
-    const whole = [ha && p.author, hr && p.reposter].filter(Boolean);
+    const whole = ha ? [p.author] : [];
     const target = whole.length ? article : (hq && p.quoteBox ? p.quoteBox : null);
     const handles = whole.length ? whole : (target ? [p.quoted] : []);
     if (target) {
