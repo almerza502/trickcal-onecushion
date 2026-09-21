@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.4.2
+// @version      0.4.3
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -763,7 +763,7 @@
     if (ytGuarded.has(v)) return;
     ytGuarded.add(v);
     // クッションの間は、ページ側やキー操作で再生が始まってもすぐ止める
-    const stop = () => { if (ytPl && v.closest('[data-tg-pl]')) v.pause(); };
+    const stop = () => { if (ytPl && v.closest('[data-tg-pl]')) { ytPl.guardAt = Date.now(); v.pause(); } };
     v.addEventListener('play', stop);
     v.addEventListener('playing', stop);
   }
@@ -787,7 +787,10 @@
     revealed.set(p.id, [p.key]);
     ytPlayerClear();
     ytPlDone = `${version}:${p.id}`;
-    const v = document.querySelector(`${YT.players[p.kind].player} video`);
+    ytPlay(p.kind);
+  }
+  function ytPlay(kind) {
+    const v = document.querySelector(`${YT.players[kind].player} video`);
     const r = v && v.play();
     if (r && r.catch) r.catch(() => {});
   }
@@ -795,7 +798,13 @@
     const cur = cfg.yt ? ytCurrent() : null;
     if (!cur) { if (ytPl) ytPlayerClear(); return; }
     if (ytPl && ytPl.id === cur.id && ytPl.ver === version) { ytPlayerApply(); return; }   // 掛けたまま。要素が作り直されていたら付け直す
-    if (ytPl) ytPlayerClear();   // 別の動画に移った・リストが変わった。前のクッションは先に外す
+    if (ytPl) {
+      // 別の動画に移った・リストが変わった。前のクッションは先に外す。
+      // 次の動画は、URL が変わるより先に（同じ video 要素で）再生が始まることがある。そのとき止めたのは移った先の動画の再生なので、戻す
+      const resume = ytPl.id !== cur.id && ytPl.guardAt && Date.now() - ytPl.guardAt < 3000 ? ytPl.kind : '';
+      ytPlayerClear();
+      if (resume) ytPlay(resume);
+    }
     if (ytPlDone === `${version}:${cur.id}`) return;
     const seq = ++ytPlSeq, ver = version;
     let listed = false, hd = '';

@@ -56,8 +56,11 @@ main(async () => {
   await sv.play();   // 前の動画から続けて再生している状態（自動再生・Shorts の送り）
   await go(t, `/shorts/${V.a2}`);
   check('Q2 再生したまま Shorts に移ってリストのチャンネルだったら、Shorts のプレーヤーに掛けて止める', pl(t, '#shorts-player') === '2' && q(t, 'yt-shorts-video-title-view-model').hasAttribute('data-tg-pltitle') && !q(t, '#movie_player').hasAttribute('data-tg-pl') && sv.paused === true && sv.__pauses >= 1, [pl(t, '#shorts-player'), sv.paused, sv.__pauses]);
+  // 次の動画は、URL が変わるより先に同じ video 要素で再生が始まる（実際の順序）。クッションが残っている間なので一度止まる
+  await sv.play(); await t.sleep(10);
+  check('Q3a 準備: URL が変わる前に始まった次の動画の再生は、いったん止まる', sv.paused === true);
   await go(t, `/shorts/${V.b}`);
-  check('Q3 次の Shorts がリストに無ければ外す', !q(t, '[data-tg-pl]') && !q(t, '[data-tg-pltitle]'));
+  check('Q3 次の Shorts がリストに無ければ外し、止めてしまった再生を戻す', !q(t, '[data-tg-pl]') && !q(t, '[data-tg-pltitle]') && sv.paused === false, [sv.paused]);
   await go(t, `/watch?v=${V.a}`);
   check('Q4 一度表示にした動画に戻っても掛けない', !q(t, '[data-tg-pl]'));
   await go(t, `/watch?v=${V.x}`);
