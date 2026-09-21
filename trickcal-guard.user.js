@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.4.1
+// @version      0.4.2
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -95,6 +95,11 @@
     handleLink: 'a[href^="/@"]',                     // 無いカードもある（Shorts の棚・再生ページの横の一覧など）
     channelName: 'ytd-channel-name',
     noName:     'ytm-shorts-lockup-view-model',     // チャンネル名が出ないカード。ぼかしている間は、文言と一緒にチャンネル名を出す
+    // 再生中の動画。player の中身をまるごとぼかし、title も一緒にぼかす
+    players: {
+      watch:  { player: '#movie_player',  title: 'ytd-watch-metadata h1' },
+      shorts: { player: '#shorts-player', title: 'yt-shorts-video-title-view-model' },
+    },
     text:       ['h3', '.metadata-snippet-container', '.metadata-snippet-container-one-line'],
     media:      ['ytd-thumbnail', 'yt-thumbnail-view-model', 'ytd-expandable-metadata-renderer'],   // 最後はチャプターの行（サムネイルと文字が出る）
   };
@@ -407,6 +412,20 @@
     @media (pointer: coarse) {
       [data-tg-blur][data-tg-name]::after { content: attr(data-tg-name) '\\A' 'タップで表示'; }
       [data-tg-blur][data-tg-name][data-tg-left]::after { content: attr(data-tg-name) '\\A' 'あと ' attr(data-tg-left) ' 回タップで表示'; }
+    }
+    /* 再生中の動画: プレーヤーの中身（動画・開始前のサムネイル・操作バー）をまるごとぼかし、文言はプレーヤー自身の ::after に出す */
+    /* visibility: Shorts のプレーヤーは再生が始まるまで隠されている。始まる前に止めると隠れたままになり、文言も出ず押せもしないので、出しておく。
+       overflow: ぼかしのにじみをプレーヤーの外に出さない */
+    [data-tg-pl] { cursor: pointer; visibility: visible !important; overflow: hidden !important; }
+    [data-tg-pl] > * { filter: blur(40px) !important; }
+    [data-tg-pl]::after { content: attr(data-tg-pl-name) '\\A' 'クリックで再生'; white-space: pre-line; text-align: center;
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.65); color: #fff;
+      padding: 8px 14px; border-radius: 16px; font-size: 13px; line-height: 1.5; z-index: 100; pointer-events: none; }
+    [data-tg-pl]:not([data-tg-pl="1"])::after { content: attr(data-tg-pl-name) '\\A' 'あと ' attr(data-tg-pl) ' 回クリックで再生'; }
+    [data-tg-pltitle] { filter: blur(10px); user-select: none; }
+    @media (pointer: coarse) {
+      [data-tg-pl]::after { content: attr(data-tg-pl-name) '\\A' 'タップで再生'; }
+      [data-tg-pl]:not([data-tg-pl="1"])::after { content: attr(data-tg-pl-name) '\\A' 'あと ' attr(data-tg-pl) ' 回タップで再生'; }
     }
     /* サムネイルが左にある横長のカードは、文言をサムネイルの上（左寄せ）に置く */
     ytd-video-renderer[data-tg-blur]::after, ytd-compact-video-renderer[data-tg-blur]::after,
@@ -726,7 +745,72 @@
     }
     ytButtons(card);
   }
+
+  // 再生中の動画（再生ページ・Shorts）。自動再生や Shorts の送りでリストのチャンネルの動画が始まったら、止めてぼかす。
+  // 対象: チャンネルがリストにあり、このセッションでその動画を表示にしていないとき。
+  // どの動画かは URL で決める（ページを移った直後の DOM には、前の動画のチャンネルが少しの間残っている）
+  let ytPl = null;          // いまクッションを掛けている動画 { id, kind, key, name, left, ver }
+  let ytPlDone = '';        // 判定が済んで、掛けないと決まった動画（'版数:動画 ID'）
+  let ytPlSeq = 0;
+  function ytCurrent() {
+    let kind = '', id = '';
+    if (location.pathname === '/watch') { kind = 'watch'; id = new URLSearchParams(location.search).get('v') || ''; }
+    else { const m = location.pathname.match(/^\/shorts\/([\w-]{11})/); if (m) { kind = 'shorts'; id = m[1]; } }
+    return /^[\w-]{11}$/.test(id) ? { kind, id, url: 'https://www.youtube.com/' + (kind === 'watch' ? 'watch?v=' : 'shorts/') + id } : null;
+  }
+  const ytGuarded = new WeakSet();
+  function ytGuard(v) {
+    if (ytGuarded.has(v)) return;
+    ytGuarded.add(v);
+    // クッションの間は、ページ側やキー操作で再生が始まってもすぐ止める
+    const stop = () => { if (ytPl && v.closest('[data-tg-pl]')) v.pause(); };
+    v.addEventListener('play', stop);
+    v.addEventListener('playing', stop);
+  }
+  function ytPlayerApply() {
+    const sel = YT.players[ytPl.kind];
+    const player = document.querySelector(sel.player);
+    if (!player) return;   // まだ出来ていない。次の走査でもう一度
+    if (player.getAttribute('data-tg-pl') !== String(ytPl.left)) player.setAttribute('data-tg-pl', String(ytPl.left));
+    if (player.getAttribute('data-tg-pl-name') !== ytPl.name) player.setAttribute('data-tg-pl-name', ytPl.name);
+    for (const t of document.querySelectorAll(sel.title)) if (!t.hasAttribute('data-tg-pltitle')) t.setAttribute('data-tg-pltitle', '1');
+    for (const v of player.querySelectorAll('video')) { ytGuard(v); if (!v.paused) v.pause(); }
+  }
+  function ytPlayerClear() {
+    ytPl = null;
+    for (const el of document.querySelectorAll('[data-tg-pl]')) { el.removeAttribute('data-tg-pl'); el.removeAttribute('data-tg-pl-name'); }
+    for (const el of document.querySelectorAll('[data-tg-pltitle]')) el.removeAttribute('data-tg-pltitle');
+  }
+  function ytPlayerClick() {
+    const p = ytPl;
+    if (--p.left > 0) { ytPlayerApply(); return; }
+    revealed.set(p.id, [p.key]);
+    ytPlayerClear();
+    ytPlDone = `${version}:${p.id}`;
+    const v = document.querySelector(`${YT.players[p.kind].player} video`);
+    const r = v && v.play();
+    if (r && r.catch) r.catch(() => {});
+  }
+  async function ytCheckPlayer() {
+    const cur = cfg.yt ? ytCurrent() : null;
+    if (!cur) { if (ytPl) ytPlayerClear(); return; }
+    if (ytPl && ytPl.id === cur.id && ytPl.ver === version) { ytPlayerApply(); return; }   // 掛けたまま。要素が作り直されていたら付け直す
+    if (ytPl) ytPlayerClear();   // 別の動画に移った・リストが変わった。前のクッションは先に外す
+    if (ytPlDone === `${version}:${cur.id}`) return;
+    const seq = ++ytPlSeq, ver = version;
+    let listed = false, hd = '';
+    if (!revealed.has(cur.id)) {
+      hd = await ytLookup(cur);
+      try { listed = !!hd && await isListed('yt:@' + hd); } catch (err) { console.error('[tg] evaluate failed', err); }
+    }
+    const now = ytCurrent();
+    if (seq !== ytPlSeq || ver !== version || !now || now.id !== cur.id) return;   // 待つ間に別の動画へ移った・リストが変わった
+    if (!listed || revealed.has(cur.id)) { if (hd || revealed.has(cur.id)) ytPlDone = `${version}:${cur.id}`; return; }
+    ytPl = { id: cur.id, kind: cur.kind, key: 'yt:@' + hd, name: ytCh.get(hd) || '@' + hd, left: clicksOf(), ver };
+    ytPlayerApply();
+  }
   function ytScan() {
+    ytCheckPlayer();
     for (const card of document.querySelectorAll(YT.card)) {
       const v = cfg.yt ? ytVideoOf(card) : null;
       if (!v) { if (card.dataset.tgKey) ytClear(card); continue; }
@@ -740,9 +824,13 @@
   if (SITE === 'yt') {
     // YouTube のクリック処理より先に受けるため、window の capture で取る（document に付けると動画へ移動してしまう）
     window.addEventListener('click', e => {
+      if (ytPl && e.target.closest?.('[data-tg-pl]')) { e.preventDefault(); e.stopImmediatePropagation(); ytPlayerClick(); return; }
       const card = e.target.closest?.(YT.card);
       if (card) onBlurClick(card, e);
     }, true);
+    // クッションの間は、プレーヤーの上での押下・ダブルクリック（再生の切り替え・全画面）をページに渡さない
+    const onPress = e => { if (ytPl && e.target.closest?.('[data-tg-pl]')) e.stopImmediatePropagation(); };
+    for (const type of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'touchstart', 'touchend']) window.addEventListener(type, onPress, true);
     // ぼかしている間は、カーソルを乗せたときの自動再生プレビューを始めさせない。
     // プレビューはサムネイルではなくカード全体への hover で始まるので、ぼかしのあるカードは丸ごと止める
     const onHover = e => {

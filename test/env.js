@@ -46,6 +46,10 @@ async function boot(html, gm, opts = {}) {
   w.setTimeout = (fn, ms, ...a) => (ms >= 1000 ? (longTimers.set(--longId, fn), longId) : realSet(fn, ms, ...a));
   w.clearTimeout = id => (id < 0 ? longTimers.delete(id) : realClear(id));
   if (opts.clock) w.Date.now = () => opts.clock.now;
+  // jsdom の video は再生できないので、play / pause / paused を簡単なもので置き換える（呼ばれた回数は el.__plays / el.__pauses）
+  Object.defineProperty(w.HTMLMediaElement.prototype, 'paused', { configurable: true, get() { return this.__playing !== true; } });
+  w.HTMLMediaElement.prototype.play = function () { this.__plays = (this.__plays || 0) + 1; this.__playing = true; this.dispatchEvent(new w.Event('play')); return Promise.resolve(); };
+  w.HTMLMediaElement.prototype.pause = function () { this.__pauses = (this.__pauses || 0) + 1; this.__playing = false; };
   // jsdom には innerText が無いので textContent で代用
   Object.defineProperty(w.HTMLElement.prototype, 'innerText', { get() { return this.textContent; } });
   Object.assign(w, {
