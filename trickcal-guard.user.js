@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @namespace    tg-guard
-// @version      0.4.0
+// @version      0.4.1
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @author       anonymous
 // @license      MIT
@@ -94,6 +94,7 @@
     videoLink:  'a[href^="/watch?v="], a[href^="/shorts/"]',
     handleLink: 'a[href^="/@"]',                     // 無いカードもある（Shorts の棚・再生ページの横の一覧など）
     channelName: 'ytd-channel-name',
+    noName:     'ytm-shorts-lockup-view-model',     // チャンネル名が出ないカード。ぼかしている間は、文言と一緒にチャンネル名を出す
     text:       ['h3', '.metadata-snippet-container', '.metadata-snippet-container-one-line'],
     media:      ['ytd-thumbnail', 'yt-thumbnail-view-model', 'ytd-expandable-metadata-renderer'],   // 最後はチャプターの行（サムネイルと文字が出る）
   };
@@ -400,6 +401,13 @@
     .tg-row .tg-btn { margin-left: 0; max-width: none; color: #fff; opacity: .85; }
     ${SITE === 'yt' ? `[data-tg-blur]::after { top: 50%; font-size: 12px; white-space: normal; width: max-content;
       max-width: calc(100% - 16px); text-align: center; box-sizing: border-box; }
+    /* チャンネル名の出ないカード（Shorts）: 文言の上の行にチャンネル名を出す */
+    [data-tg-blur][data-tg-name]::after { content: attr(data-tg-name) '\\A' 'クリックで表示'; white-space: pre-line; }
+    [data-tg-blur][data-tg-name][data-tg-left]::after { content: attr(data-tg-name) '\\A' 'あと ' attr(data-tg-left) ' 回クリックで表示'; }
+    @media (pointer: coarse) {
+      [data-tg-blur][data-tg-name]::after { content: attr(data-tg-name) '\\A' 'タップで表示'; }
+      [data-tg-blur][data-tg-name][data-tg-left]::after { content: attr(data-tg-name) '\\A' 'あと ' attr(data-tg-left) ' 回タップで表示'; }
+    }
     /* サムネイルが左にある横長のカードは、文言をサムネイルの上（左寄せ）に置く */
     ytd-video-renderer[data-tg-blur]::after, ytd-compact-video-renderer[data-tg-blur]::after,
     yt-lockup-view-model[data-tg-blur]:has(> .ytLockupViewModelHorizontal)::after { left: 8px; transform: translateY(-50%); }` : ''}
@@ -430,7 +438,7 @@
     for (const el of [article, ...article.querySelectorAll('[data-tg-blur]')]) BLUR_ATTRS.forEach(a => el.removeAttribute(a));
   }
   function clearMarks(article) {
-    for (const k of ['tgHandles', 'tgSrc', 'tgRevealed']) delete article.dataset[k];
+    for (const k of ['tgHandles', 'tgSrc', 'tgRevealed', 'tgName']) delete article.dataset[k];
     unblur(article);
   }
   const handlesOf = article => { try { return JSON.parse(article.dataset.tgHandles || '[]'); } catch { return []; } };
@@ -611,6 +619,9 @@
   const YT_VID_MAX = 3000;     // 保存する件数の上限。超えたら古いものから捨てる
   const YT_LOOKUP_MAX = 4;     // 同時に引く数
   const ytVid = new Map(SITE === 'yt' ? Object.entries(asMap(store.get('tg_yt_vid', {}))) : []);
+  // ハンドル -> チャンネルの表示名。引いたときに一緒に分かるので覚えておく（チャンネル名の出ないカードで使う）
+  const YT_CH_MAX = 1000;
+  const ytCh = new Map(SITE === 'yt' ? Object.entries(asMap(store.get('tg_yt_ch', {}))) : []);
   const ytInflight = new Map();
   const ytQueue = []; let ytActive = 0, ytFlushTimer = 0;
   function ytFlush() {
@@ -620,6 +631,10 @@
     const keys = Object.keys(all);
     for (const k of keys.slice(0, Math.max(0, keys.length - YT_VID_MAX))) delete all[k];
     store.set('tg_yt_vid', all);
+    const names = { ...asMap(store.get('tg_yt_ch', {})), ...Object.fromEntries(ytCh) };
+    const nk = Object.keys(names);
+    for (const k of nk.slice(0, Math.max(0, nk.length - YT_CH_MAX))) delete names[k];
+    store.set('tg_yt_ch', names);
   }
   const ytPump = () => { while (ytActive < YT_LOOKUP_MAX && ytQueue.length) { ytActive++; ytQueue.shift()().finally(() => { ytActive--; ytPump(); }); } };
   async function ytFetchHandle(v) {
@@ -628,8 +643,11 @@
       // クッキーを付けない。返ってくる author_url が https://www.youtube.com/@ハンドル
       const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(v.url), { credentials: 'omit', signal: ac.signal });
       if (!r.ok) throw new Error('status ' + r.status);
-      const m = String((await r.json()).author_url || '').match(/\/@([^/?#]+)/);
-      return m ? ytNorm(m[1]) : '';
+      const j = await r.json();
+      const m = String(j.author_url || '').match(/\/@([^/?#]+)/);
+      const hd = m ? ytNorm(m[1]) : '';
+      if (hd && j.author_name) ytCh.set(hd, String(j.author_name).slice(0, 80));
+      return hd;
     } catch (err) { log('lookup failed', v.id, err); return ''; }
     finally { clearTimeout(timer); }
   }
@@ -702,6 +720,7 @@
     card.dataset.tgSrc = src;
     if (listed) {
       card.dataset.tgHandles = JSON.stringify([k]);
+      if (card.matches(YT.noName)) card.dataset.tgName = ytCh.get(hd) || '@' + hd;
       if (revealed.has(v.id)) card.dataset.tgRevealed = '1';
       else if (!applyStep(card, steps.get(v.id)?.step || 0)) reveal(card);
     }
@@ -907,7 +926,7 @@
   GM_registerMenuCommand('全データを初期化', () => {
     if (!confirm('ローカルのリスト・報告履歴をすべて削除します。よろしいですか？')) return;
     // 空の値はキーごとに型を合わせる（tg_reported を配列にすると、以後の報告履歴が保存されなくなる）
-    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}' };
+    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}', tg_yt_ch: '{}' };
     for (const [k, v] of Object.entries(empty)) GM_setValue(k, v);
     GM_setValue('tg_remote_next', 0);
     GM_setValue('tg_remote_busy', 0);

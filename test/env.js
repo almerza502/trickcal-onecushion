@@ -17,7 +17,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // opts.remote: 配布リスト GET への応答を返す関数。{ status, responseText } | 'error' | 'timeout'。未指定なら応答なし
 // opts.clock : { now } を渡すとスクリプトから見える Date.now() がこの値になる
 // opts.url   : 開いているページの URL。未指定なら X
-// opts.oembed: 動画 ID を受けて oEmbed の応答を返す関数。ハンドルの文字列 | 'error' | 'hang'（応答なし） | <status 番号>。未指定なら通信エラー
+// opts.oembed: 動画 ID を受けて oEmbed の応答を返す関数。ハンドルの文字列（'ハンドル|表示名' も可） | 'error' | 'hang'（応答なし） | <status 番号>。未指定なら通信エラー
 // スクリプトの setInterval は実際には動かさず、tick() で手動で一回ぶん回す
 const tabsOf = gm => (gm.__tabs ||= new Set());
 async function boot(html, gm, opts = {}) {
@@ -36,7 +36,7 @@ async function boot(html, gm, opts = {}) {
       if (r === 'hang') return;
       if (r === 'error') rej(new Error('network'));
       else if (typeof r === 'number') res({ ok: false, status: r, json: async () => ({}) });
-      else res({ ok: true, status: 200, json: async () => ({ author_url: 'https://www.youtube.com/@' + r }) });
+      else { const [hd, name] = String(r).split('|'); res({ ok: true, status: 200, json: async () => ({ author_url: 'https://www.youtube.com/@' + hd, author_name: name || '' }) }); }
     }, 5));
   };
   w.setInterval = fn => intervals.push(fn);

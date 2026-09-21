@@ -31,7 +31,7 @@ const HTML = `<!doctype html><body>
   <yt-lockup-view-model id="pl"><a href="/playlist?list=PL1">list</a><h3>playlist</h3></yt-lockup-view-model>
 </body>`;
 // 動画 ID -> oEmbed が返すハンドル
-const OWNER = { [V.a2]: 'TG_Test_A', [V.b2]: 'tg_test_b', [V.a3]: 'tg_test_a', [V.x1]: 'error', [V.h1]: 'hang' };
+const OWNER = { [V.a2]: 'TG_Test_A|Test Channel A', [V.b2]: 'tg_test_b', [V.a3]: 'tg_test_a', [V.x1]: 'error', [V.h1]: 'hang' };
 const oembed = id => OWNER[id] || 404;
 
 const on = (extra = {}) => new Map([['tg_cfg', JSON.stringify({ yt: true, clicks: 1, ...extra })]]);
@@ -66,6 +66,8 @@ main(async () => {
   t = await boot(HTML, gm, { url: URL, oembed });
   check('B1 リンクのあるカード: リストのチャンネルだけぼかす（ハンドルの大文字は区別しない）', blurred(t, '#sA') && !blurred(t, '#sB') && !blurred(t, '#sN'));
   check('B2 リンクの無いカード: 動画 ID から引いてぼかす', blurred(t, '#shA') && blurred(t, '#lA') && !blurred(t, '#shB'));
+  check('B2a チャンネル名の出ないカード（Shorts）には、ぼかしている間チャンネル名を付ける。他のカードには付けない', q(t, '#shA').dataset.tgName === 'Test Channel A' && !q(t, '#sA').dataset.tgName && !q(t, '#lA').dataset.tgName && !q(t, '#shB').dataset.tgName, [q(t, '#shA').dataset.tgName, q(t, '#lA').dataset.tgName]);
+  check('B2b 文言の規則にチャンネル名の行がある', t.styles.join('\n').includes("[data-tg-blur][data-tg-name]::after { content: attr(data-tg-name) '\\A' 'クリックで表示'"));
   check('B3 引けなかったカードはぼかさない。ボタンも出さない', !blurred(t, '#shX') && same(t.texts('#shX'), []), t.texts('#shX'));
   check('B4 引くのはリンクの無いカードだけ。クッキーは付けない', same(t.fetches.map(f => f.id).sort(), [V.a2, V.a3, V.b2, V.x1].sort()) && t.fetches.every(f => f.init.credentials === 'omit'), t.fetches.map(f => f.id));
   check('B5 動画で無いカード（再生リスト）は触らない', !q(t, '#pl').dataset.tgKey && !blurred(t, '#pl'));
@@ -90,11 +92,12 @@ main(async () => {
   // 「先行版扱い」: そのチャンネルのカードが全部ぼける
   await t.click('先行版扱い', '#sB');
   await t.sleep(80);
+  check('D0 表示名の分からないチャンネルは @ハンドル を出す', q(t, '#shB').dataset.tgName === '@tg_test_b', q(t, '#shB').dataset.tgName);
   check('D1 「先行版扱い」でそのチャンネルのカードを全部ぼかす', blurred(t, '#sB') && blurred(t, '#shB') && JSON.parse(gm.get('tg_local')).includes('yt:@tg_test_b'), gm.get('tg_local'));
   check('D2 引き直さない（保存した結果を使う）', t.fetches.filter(f => f.id === V.b2).length === 1, t.fetches.map(f => f.id));
   await t.click('解除', '#sB');
   await t.sleep(80);
-  check('D3 「解除」で戻る', !blurred(t, '#sB') && !blurred(t, '#shB') && same(t.texts('#sB'), ['先行版扱い']));
+  check('D3 「解除」で戻る（チャンネル名の印も消える）', !blurred(t, '#sB') && !blurred(t, '#shB') && !q(t, '#shB').dataset.tgName && same(t.texts('#sB'), ['先行版扱い']));
   // 日本語のハンドル
   await t.click('先行版扱い', '#sN');
   check('D4 パーセント符号化されたハンドルは元の文字で保存する', JSON.parse(gm.get('tg_local')).includes('yt:@テスト') && blurred(t, '#sN'), gm.get('tg_local'));
@@ -114,7 +117,7 @@ main(async () => {
 
   // 読み込み直したあとは、保存した結果で判定する（引かない）
   t = await boot(HTML, gm, { url: URL, oembed });
-  check('F1 再読込後は保存した結果を使い、引けなかった動画だけ引き直す', blurred(t, '#shA') && same(t.fetches.map(f => f.id), [V.x1]), t.fetches.map(f => f.id));
+  check('F1 再読込後は保存した結果を使い、引けなかった動画だけ引き直す（表示名も保存したものを使う）', blurred(t, '#shA') && q(t, '#shA').dataset.tgName === 'Test Channel A' && same(t.fetches.map(f => f.id), [V.x1]), [t.fetches.map(f => f.id), q(t, '#shA').dataset.tgName]);
   // 設定パネルで保存しても yt: の行は消えない
   t.menu['設定を開く']();
   const before = q(t, '#tg-local').value.split('\n').sort();
