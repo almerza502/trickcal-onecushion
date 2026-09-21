@@ -6,10 +6,15 @@
 ## 説明（1行・検索結果に表示）
 トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 
+## 英語の名前と説明（スクリプトのヘッダ @name:en / @description:en に入っている。フォームに入れる所は無い）
+Trickcal One-Cushion (spoiler blur for X and YouTube)
+
+For players of the global version of Trickcal: blurs posts on X and video thumbnails on YouTube from accounts that post content from the advance (Korean) version, and shows them when you click. Judged per account, not by keywords. The interface is in Japanese.
+
 ## 追加情報（Markdown）
 
 ### これは何？
-グローバル版トリッカル（トリッカル・もちもちほっぺ大作戦）の進度で遊んでいる方向けの、X（Twitter）用ネタバレ回避スクリプトです。
+グローバル版トリッカル（Trickcal / トリッカル・もちもちほっぺ大作戦）の進度で遊んでいる方向けの、X（Twitter）用ネタバレ回避スクリプトです。
 先行版（本国版・韓国版）の内容を投稿しているアカウントの投稿をぼかし、クリックしたときだけ表示します。
 ミュートやブロックと違って投稿は消さず、見るかどうかを自分で決める「ワンクッション」を挟むだけです。
 設定を入にすると、YouTube でも同じように、チャンネル単位で動画のサムネイルとタイトルをぼかします。
@@ -48,3 +53,6 @@ YouTube では、チャンネルへのリンクが無い動画カード（Shorts
 - X や YouTube の仕様変更で動かなくなることがあります。気づいたらフィードバックで教えてください
 - YouTube の Shorts では、再生や次の動画への移動がうまく動かないことがあります。そのときは設定で「YouTube でも使う」を切にしてください
 - 未実装キャラや先行情報を完全に防ぐものではありません。あくまで、見たくないものを見ないための道具です
+
+### English
+A spoiler cushion for players of the global version of Trickcal. It blurs posts on X and video thumbnails on YouTube from accounts that post content from the advance (Korean) version, until you click them. The interface and this page are in Japanese.

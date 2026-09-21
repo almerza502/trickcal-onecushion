@@ -1,8 +1,10 @@
 // ==UserScript==
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
+// @name:en      Trickcal One-Cushion (spoiler blur for X and YouTube)
 // @namespace    tg-guard
-// @version      0.4.6
+// @version      0.4.7
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
+// @description:en For players of the global version of Trickcal: blurs posts on X and video thumbnails on YouTube from accounts that post content from the advance (Korean) version, and shows them when you click. Judged per account, not by keywords. The interface is in Japanese.
 // @author       anonymous
 // @license      MIT
 // @match        https://x.com/*
