@@ -1,10 +1,12 @@
 // ==UserScript==
-// @name         トリッカル もちもちワンクッション（ネタバレ回避）
-// @name:en      Trickcal One-Cushion (spoiler blur for X and YouTube)
+// @name         Trickcal One-Cushion
+// @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
+// @name:ko      트릭컬 원쿠션 (스포일러 가리기)
 // @namespace    tg-guard
-// @version      0.4.9
-// @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
-// @description:en For players of the global version of Trickcal: blurs posts on X and video thumbnails on YouTube from accounts that post content from the advance (Korean) version, and shows them when you click. Judged per account, not by keywords. The interface is in Japanese.
+// @version      0.5.0
+// @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
+// @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
+// @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
 // @author       anonymous
 // @license      MIT
 // @match        https://x.com/*
@@ -41,17 +43,105 @@
   // 動いているサイト。X と YouTube で違うのは、DOM の読み方・ぼかす対象・ボタンの置き場所だけ
   const SITE = /(^|\.)youtube\.com$/.test(location.hostname) ? 'yt' : 'x';
 
-  // Google フォーム: 「事前入力したリンクを取得」で entry.ID を確認して埋める
-  const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdBFHFRtQcp1sBq49UNkYV_bTlpRrBPA7sIY5vSvJX0nc2jlQ/formResponse';
-  const FORM_FIELDS = {
-    user:     'entry.2120562442',
-    reposter: 'entry.307293834',
-    link:     'entry.1477113937',
-    date:     'entry.2050821820',
-    text:     'entry.1290347790',
-    imgs:     'entry.1028905437',
-    iid:      'entry.1421019080',
+  // ────────────────────────────────────────────────────────────────
+  // 0b. 文言 — 言語ごとの表。設定 > ブラウザの言語 > 英語。{n} {h} は fmt() で埋める
+  // ────────────────────────────────────────────────────────────────
+  const L10N = {
+    en: {
+      title: 'Trickcal One-Cushion',
+      note: 'May contain spoilers — ',
+      clickShow: 'Click to show', tapShow: 'Tap to show',
+      leftClickShow: '{n} more clicks to show', leftTapShow: '{n} more taps to show',
+      clickPlay: 'Click to play', tapPlay: 'Tap to play',
+      leftClickPlay: '{n} more clicks to play', leftTapPlay: '{n} more taps to play',
+      add: 'Blur', addTitle: 'Blur this account on this device (nothing is sent)',
+      report: 'Report', reportTitle: 'Report this post to the author', reportedTitle: 'Reported',
+      unlocal: 'Unblur', unlocalTitle: 'Stop blurring this account on this device',
+      restore: 'Restore', restoreTitle: 'Stop always showing this account; judge it normally again',
+      whiteAt: 'Always show {h}', whiteAtTitle: 'Always show {h} on this device (exception to the shared list)',
+      unlocalAt: 'Unblur {h}', unlocalAtTitle: 'Stop blurring {h} on this device',
+      listCount: 'Shared list: {n}',
+      useDist: ' Use the shared list', cushion: " Don't blur posts that link to fusetter / poipiku / privatter",
+      useYt: ' Also use on YouTube (blurs thumbnails and titles)',
+      clicks: 'Clicks to show ', clicksHint: '2 or more: text first, then images. 3 or more: the blur weakens step by step before that',
+      localLabel: 'Blurred accounts (this device only, one per line) ', localHint: 'YouTube: yt:@handle',
+      whiteLabel: 'Always show (this device only)',
+      lang: 'Language ', langAuto: 'Auto (browser language)',
+      refresh: 'Update the shared list now', clearRep: 'Clear report history', copyPend: 'Copy pending reports', save: 'Save', close: 'Close',
+      copied: 'Copied {n} reports',
+      openSettings: 'Open settings', reset: 'Reset settings and lists',
+      resetConfirm: 'This deletes the settings, the lists on this device, the report history and the fetched list. The device ID (random ID attached to reports) stays. Continue?',
+      dailyConfirm: 'More than {n} reports today. Send anyway?',
+    },
+    ja: {
+      title: 'もちもちワンクッション',
+      note: '先行版の内容が含まれる可能性があります — ',
+      clickShow: 'クリックで表示', tapShow: 'タップで表示',
+      leftClickShow: 'あと {n} 回クリックで表示', leftTapShow: 'あと {n} 回タップで表示',
+      clickPlay: 'クリックで再生', tapPlay: 'タップで再生',
+      leftClickPlay: 'あと {n} 回クリックで再生', leftTapPlay: 'あと {n} 回タップで再生',
+      // addSide: 幅の狭い画面で投稿の左下に置くときの文字。幅 40px に収まらないので、折り返してよい位置（ゼロ幅スペース）を入れる
+      add: '先行版扱い', addSide: '先行版\u200B扱い', addTitle: 'この端末で先行版扱いにする（送信しません）',
+      report: '報告', reportTitle: '先行版の内容として報告する', reportedTitle: '報告済み',
+      unlocal: '解除', unlocalTitle: 'この端末の先行版扱いを解除する',
+      restore: '戻す', restoreTitle: '「常に表示」をやめて、通常の判定に戻す',
+      whiteAt: '常に表示 {h}', whiteAtTitle: 'この端末で {h} を常に表示する（配布リストの例外）',
+      unlocalAt: '解除 {h}', unlocalAtTitle: 'この端末の {h} の先行版扱いを解除する',
+      listCount: '配布リスト {n} 件',
+      useDist: ' 配布リストを使う', cushion: ' fusetter / poipiku / privatter リンクがある投稿はぼかさない',
+      useYt: ' YouTube でも使う（動画のサムネイルとタイトルをぼかす）',
+      clicks: '表示までのクリック数 ', clicksHint: '2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる',
+      localLabel: '先行版扱い（この端末のみ・1行1アカウント） ', localHint: 'YouTube は yt:@ハンドル',
+      whiteLabel: '常に表示（この端末のみ）',
+      lang: '言語 ', langAuto: '自動（ブラウザに合わせる）',
+      refresh: '配布リストを今すぐ更新', clearRep: '報告履歴をクリア', copyPend: '保留中の報告をコピー', save: '保存', close: '閉じる',
+      copied: '{n} 件をコピーしました',
+      openSettings: '設定を開く', reset: '設定とリストを初期化',
+      resetConfirm: '設定・この端末のリスト・報告履歴・取得したリストを削除します。端末 ID（報告に付くランダムな ID）は残ります。よろしいですか？',
+      dailyConfirm: '本日{n}件を超えています。送信しますか？',
+    },
+    ko: {
+      title: '트릭컬 원쿠션',
+      note: '스포일러가 있을 수 있음 — ',
+      clickShow: '클릭해서 보기', tapShow: '탭해서 보기',
+      leftClickShow: '{n}번 더 클릭하면 표시', leftTapShow: '{n}번 더 탭하면 표시',
+      clickPlay: '클릭해서 재생', tapPlay: '탭해서 재생',
+      leftClickPlay: '{n}번 더 클릭하면 재생', leftTapPlay: '{n}번 더 탭하면 재생',
+      add: '가리기', addTitle: '이 기기에서 이 계정을 가립니다 (아무것도 보내지 않음)',
+      report: '제보', reportTitle: '이 글을 제작자에게 제보합니다', reportedTitle: '제보함',
+      unlocal: '가림 해제', unlocalTitle: '이 기기에서 이 계정의 가림을 해제합니다',
+      restore: '되돌리기', restoreTitle: "'항상 표시'를 해제하고 원래 판정으로 돌아갑니다",
+      whiteAt: '항상 표시 {h}', whiteAtTitle: '이 기기에서 {h}를 항상 표시합니다 (공유 목록 예외)',
+      unlocalAt: '해제 {h}', unlocalAtTitle: '이 기기에서 {h}의 가림을 해제합니다',
+      listCount: '공유 목록 {n}건',
+      useDist: ' 공유 목록 사용', cushion: ' fusetter / poipiku / privatter 링크가 있는 글은 가리지 않음',
+      useYt: ' YouTube에서도 사용 (썸네일과 제목을 가림)',
+      clicks: '표시까지 클릭 수 ', clicksHint: '2 이상: 본문 → 이미지 순. 3 이상: 그 전에 흐림이 단계적으로 약해짐',
+      localLabel: '가리는 계정 (이 기기만, 한 줄에 하나) ', localHint: 'YouTube는 yt:@핸들',
+      whiteLabel: '항상 표시 (이 기기만)',
+      lang: '언어 ', langAuto: '자동 (브라우저 언어)',
+      refresh: '공유 목록 지금 갱신', clearRep: '제보 기록 지우기', copyPend: '보류 중인 제보 복사', save: '저장', close: '닫기',
+      copied: '{n}건 복사함',
+      openSettings: '설정 열기', reset: '설정과 목록 초기화',
+      resetConfirm: '설정, 이 기기의 목록, 제보 기록, 받아 둔 목록을 지웁니다. 기기 ID(제보에 붙는 무작위 ID)는 남습니다. 계속할까요?',
+      dailyConfirm: '오늘 {n}건을 넘었습니다. 그래도 보낼까요?',
+    },
   };
+  const LANGS = ['en', 'ja', 'ko'];
+  const LANG_NAMES = { en: 'English', ja: '日本語', ko: '한국어' };
+  const resolveLang = pref => {
+    if (LANGS.includes(pref)) return pref;
+    const nav = String((typeof navigator !== 'undefined' && navigator.language) || '').slice(0, 2).toLowerCase();
+    return LANGS.includes(nav) ? nav : 'en';
+  };
+  const fmt = (tpl, v) => tpl.replace(/\{(\w+)\}/g, (_, k) => String(v[k]));
+  let LANG = 'en', T = L10N.en;   // 現在の言語と文言（pull() が決める）
+
+  // 報告の送信先（Google フォーム）。公開ビルドでは空で、報告のボタンは出ない。
+  // 報告する人向けのビルドは build.js が private/report.json から埋める（フォームの URL と entry.ID）
+  const FORM_URL = '';
+  const FORM_FIELDS = {};
+  const REPORT = !!FORM_URL;
 
   const DAILY_LIMIT = 20;   // 1日の報告上限（超えたら confirm）
   const TEXT_LIMIT = 1000;  // 送信する本文の最大長
@@ -127,7 +217,7 @@
   const asList = v => (Array.isArray(v) ? v : []);
   const asMap  = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});   // 配列だとキーが保存されないので捨てる
   const CLICKS_DEFAULT = 2;
-  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: false };
+  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: false, lang: 'auto' };
   const local = new Set();      // ユーザーが自分で追加したアカウント（小文字・平文）。YouTube のチャンネルは 'yt:@ハンドル'
   const white = new Set();      // 常に表示
   const cfg = {};
@@ -140,7 +230,11 @@
     local.clear(); asList(store.get('tg_local', [])).forEach(h => local.add(h));
     white.clear(); asList(store.get('tg_white', [])).forEach(h => white.add(h));
     for (const k of Object.keys(cfg)) delete cfg[k];
-    Object.assign(cfg, CFG_DEFAULT, asMap(store.get('tg_cfg', {})));
+    const stored = asMap(store.get('tg_cfg', {}));
+    Object.assign(cfg, CFG_DEFAULT, stored);
+    LANG = resolveLang(cfg.lang); T = L10N[LANG];
+    // 配布リストは「先行版の内容を投稿するアカウント」。韓国語で使う人（先行版で遊んでいる人）には要らないので、設定が無ければ切から始める
+    if (!('dist' in stored)) cfg.dist = LANG !== 'ko';
     for (const k of Object.keys(reported)) delete reported[k];
     Object.assign(reported, asMap(store.get('tg_reported', {})));
   }
@@ -364,8 +458,6 @@
   const MEDIA_SEL = MEDIA_TARGETS.join(', ');
   const under = (p, sels) => sels.map(x => `${p} ${x}`).join(', ');
   const BLUR_TARGETS = [...MEDIA_TARGETS, ...TEXT_TARGETS];
-  // ぼかしの上に出す文言。YouTube のカードは小さいので説明を省く
-  const NOTE = SITE === 'yt' ? '' : '先行版の内容が含まれる可能性があります — ';
   const WEAKER = [...new Set([3, 4, 5].flatMap(blurLevels))].filter(v => v !== BLUR_MAX);
 
   GM_addStyle(`
@@ -381,12 +473,10 @@
     /* 本文だけ先に表示した段階 */
     ${under('[data-tg-blur][data-tg-text]', TEXT_TARGETS)} { filter: none; clip-path: none; user-select: auto; cursor: inherit; }
     [data-tg-blur]::after {
-      content: '${NOTE}クリックで表示';
       position: absolute; left: 50%; top: 55%; transform: translate(-50%, -50%);
       background: rgba(0,0,0,.65); color: #fff; padding: 6px 12px; border-radius: 16px;
       font-size: 13px; white-space: nowrap; pointer-events: none; z-index: 3;
     }
-    [data-tg-blur][data-tg-left]::after { content: '${NOTE}あと ' attr(data-tg-left) ' 回クリックで表示'; }
     [data-tg-blur][data-tg-text]::after { top: 75%; }
     .tg-btn { font-size: 11px; opacity: .4; margin-left: 10px; background: none; border: 0;
               color: inherit; cursor: pointer; font-family: inherit; padding: 0; white-space: nowrap;
@@ -421,26 +511,16 @@
     ${SITE === 'yt' ? `[data-tg-blur]::after { top: 50%; font-size: 12px; white-space: normal; width: max-content;
       max-width: calc(100% - 16px); text-align: center; box-sizing: border-box; }
     /* チャンネル名の出ないカード（Shorts）: 文言の上の行にチャンネル名を出す */
-    [data-tg-blur][data-tg-name]::after { content: attr(data-tg-name) '\\A' 'クリックで表示'; white-space: pre-line; }
-    [data-tg-blur][data-tg-name][data-tg-left]::after { content: attr(data-tg-name) '\\A' 'あと ' attr(data-tg-left) ' 回クリックで表示'; }
-    @media (pointer: coarse) {
-      [data-tg-blur][data-tg-name]::after { content: attr(data-tg-name) '\\A' 'タップで表示'; }
-      [data-tg-blur][data-tg-name][data-tg-left]::after { content: attr(data-tg-name) '\\A' 'あと ' attr(data-tg-left) ' 回タップで表示'; }
-    }
+    [data-tg-blur][data-tg-name]::after { white-space: pre-line; }
     /* 再生中の動画: プレーヤーの中身（動画・開始前のサムネイル・操作バー）をまるごとぼかし、文言はプレーヤー自身の ::after に出す */
     /* visibility: Shorts のプレーヤーは再生が始まるまで隠されている。始まる前に止めると隠れたままになり、文言も出ず押せもしないので、出しておく。
        overflow: ぼかしのにじみをプレーヤーの外に出さない */
     [data-tg-pl] { cursor: pointer; visibility: visible !important; overflow: hidden !important; }
     [data-tg-pl] > * { filter: blur(40px) !important; }
-    [data-tg-pl]::after { content: attr(data-tg-pl-name) '\\A' 'クリックで再生'; white-space: pre-line; text-align: center;
+    [data-tg-pl]::after { white-space: pre-line; text-align: center;
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.65); color: #fff;
       padding: 8px 14px; border-radius: 16px; font-size: 13px; line-height: 1.5; z-index: 100; pointer-events: none; }
-    [data-tg-pl]:not([data-tg-pl="1"])::after { content: attr(data-tg-pl-name) '\\A' 'あと ' attr(data-tg-pl) ' 回クリックで再生'; }
     [data-tg-pltitle] { filter: blur(10px); user-select: none; }
-    @media (pointer: coarse) {
-      [data-tg-pl]::after { content: attr(data-tg-pl-name) '\\A' 'タップで再生'; }
-      [data-tg-pl]:not([data-tg-pl="1"])::after { content: attr(data-tg-pl-name) '\\A' 'あと ' attr(data-tg-pl) ' 回タップで再生'; }
-    }
     /* サムネイルが左にある横長のカードは、文言をサムネイルの上（左寄せ）に置く */
     ytd-video-renderer[data-tg-blur]::after, ytd-compact-video-renderer[data-tg-blur]::after,
     yt-lockup-view-model[data-tg-blur]:has(> .ytLockupViewModelHorizontal)::after { left: 8px; transform: translateY(-50%); }` : ''}
@@ -448,8 +528,6 @@
     @media (pointer: coarse) {
       .tg-btn { font-size: 13px; padding: 8px 2px; opacity: .55; }
       .tg-row { opacity: .9; }
-      [data-tg-blur]::after { content: '${NOTE}タップで表示'; }
-      [data-tg-blur][data-tg-left]::after { content: '${NOTE}あと ' attr(data-tg-left) ' 回タップで表示'; }
     }
     /* 幅の狭い画面: ラベルは折り返し、設定パネルは画面幅に収める */
     @media (max-width: 500px) {
@@ -457,6 +535,40 @@
       #tg-panel { top: 8px; left: 8px; right: 8px; width: auto; }
     }
   `);
+  // 文言の入る規則。言語が変わったら付け足す（同じ選択子なので後のものが勝つ）。YouTube のカードは小さいので説明（note）を省く
+  const cssStr = t => `'${t.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+  const cssTpl = (tpl, attr) => { const [a, b] = tpl.split('{n}'); return `${cssStr(a)} attr(${attr}) ${cssStr(b)}`; };   // '{n} 回…' → 'あと ' attr(x) ' 回…'
+  function langCss() {
+    const note = SITE === 'yt' ? '' : T.note;
+    const nm = "attr(data-tg-name) '\\A' ", pl = "attr(data-tg-pl-name) '\\A' ";
+    return `
+    [data-tg-blur]::after { content: ${cssStr(note + T.clickShow)}; }
+    [data-tg-blur][data-tg-left]::after { content: ${cssTpl(note + T.leftClickShow, 'data-tg-left')}; }
+    @media (pointer: coarse) {
+      [data-tg-blur]::after { content: ${cssStr(note + T.tapShow)}; }
+      [data-tg-blur][data-tg-left]::after { content: ${cssTpl(note + T.leftTapShow, 'data-tg-left')}; }
+    }
+    ${SITE === 'yt' ? `
+    [data-tg-blur][data-tg-name]::after { content: ${nm}${cssStr(T.clickShow)}; }
+    [data-tg-blur][data-tg-name][data-tg-left]::after { content: ${nm}${cssTpl(T.leftClickShow, 'data-tg-left')}; }
+    [data-tg-pl]::after { content: ${pl}${cssStr(T.clickPlay)}; }
+    [data-tg-pl]:not([data-tg-pl="1"])::after { content: ${pl}${cssTpl(T.leftClickPlay, 'data-tg-pl')}; }
+    @media (pointer: coarse) {
+      [data-tg-blur][data-tg-name]::after { content: ${nm}${cssStr(T.tapShow)}; }
+      [data-tg-blur][data-tg-name][data-tg-left]::after { content: ${nm}${cssTpl(T.leftTapShow, 'data-tg-left')}; }
+      [data-tg-pl]::after { content: ${pl}${cssStr(T.tapPlay)}; }
+      [data-tg-pl]:not([data-tg-pl="1"])::after { content: ${pl}${cssTpl(T.leftTapPlay, 'data-tg-pl')}; }
+    }` : ''}`;
+  }
+  let cssLang = '';
+  function syncLang() {
+    if (cssLang === LANG) return;
+    const first = !cssLang;
+    cssLang = LANG;
+    GM_addStyle(langCss());
+    if (!first) for (const el of document.querySelectorAll('.tg-wrap, .tg-row')) el.remove();   // ボタンの文言も変わるので付け直す
+  }
+  syncLang();
 
   // article に残す印（すべて data 属性 — React が触らない）
   //   data-tg-blur     : 現在ぼかし中。値はぼかしの強さ(px)
@@ -544,7 +656,7 @@
     const r = collectForReport(article);
     pull();   // 他のタブで報告済みかもしれない
     if (!r.link || reported[r.link]) { ensureButtons(article); return; }
-    if (todayCount() >= DAILY_LIMIT && !confirm(`本日${DAILY_LIMIT}件を超えています。送信しますか？`)) return;
+    if (todayCount() >= DAILY_LIMIT && !confirm(fmt(T.dailyConfirm, { n: DAILY_LIMIT }))) return;
     edit(() => { reported[r.link] = Date.now(); });
     ensureButtons(article);
     // 送信に失敗したら記録を戻し、もう一度「報告」を押せるようにする
@@ -570,7 +682,7 @@
     const blurred = article.hasAttribute('data-tg-blur');
     const src = white.has(a) ? 'white' : local.has(a) ? 'local' : (article.dataset.tgSrc || '');
     if (src === 'white')      out.push('restore');
-    else if (src === 'local') out.push(p.link && reported[p.link] ? 'reported' : 'report', 'unlocal');
+    else if (src === 'local') { if (REPORT) out.push(p.link && reported[p.link] ? 'reported' : 'report'); out.push('unlocal'); }
     else if (src === 'dist')  { /* 既に配布リストにある — 何もしない */ }
     else if (!blurred) out.push('add');
     // 表示後: 根拠がローカルなら「解除」、配布リストなら「常に表示」 — アカウントごとに一つだけ
@@ -583,18 +695,18 @@
     }
     return out;
   }
-  const BTN = {
-    // sideText: 幅の狭い画面で投稿の左下に置くときの文字。幅 40px に収まらないので、折り返してよい位置（ゼロ幅スペース）を入れる
-    add:      { text: '先行版扱い', sideText: '先行版\u200B扱い', title: 'この端末で先行版扱いにする（送信しません）',
+  // 文言は現在の言語の表から。sideText は幅の狭い画面で投稿の左下に置くときの文字（無ければ text）
+  const BTN = () => ({
+    add:      { text: T.add, sideText: T.addSide, title: T.addTitle,
                 run: (a, p) => { edit(() => local.add(p.author)); forgetRevealed(p.author); forgetPost(p.id || idOf(p.link)); bump(); } },
-    report:  { text: '報告', title: '先行版の内容として報告する',
+    report:   { text: T.report, title: T.reportTitle,
                 run: (a) => report(a) },
-    reported: { text: '✓', title: '報告済み', disabled: true },
-    unlocal:  { text: '解除', title: 'この端末の先行版扱いを解除する',
+    reported: { text: '✓', title: T.reportedTitle, disabled: true },
+    unlocal:  { text: T.unlocal, title: T.unlocalTitle,
                 run: (a, p) => { edit(() => local.delete(p.author)); forgetRevealed(p.author); bump(); } },
-    restore:  { text: '戻す', title: '「常に表示」をやめて、通常の判定に戻す',
+    restore:  { text: T.restore, title: T.restoreTitle,
                 run: (a, p) => { edit(() => white.delete(p.author)); forgetRevealed(p.author); bump(); } },
-  };
+  });
   // ボタンを付ける行。リンクカードや動画の中にも role="group" があり、そちらが先に見つかるので、返信ボタンのあるものを選ぶ。
   // 返信ボタンが見つからないときは、画像・動画・カードの外にある最後のもの
   function actionBarOf(article) {
@@ -629,19 +741,20 @@
   const atName = h => '@' + h.replace(/^yt:@/, '');
   function fillButtons(bar, want, article, p) {
     bar.querySelectorAll('.tg-btn').forEach(b => b.remove());
+    const B = BTN();
     for (const w of want) {
       const b = document.createElement('button');
       b.className = 'tg-btn';
       let spec;
       if (w.startsWith('white:')) {
         const h = w.slice(6);
-        spec = { text: `常に表示 ${atName(h)}`, title: `この端末で ${atName(h)} を常に表示する（配布リストの例外）`,
+        spec = { text: fmt(T.whiteAt, { h: atName(h) }), title: fmt(T.whiteAtTitle, { h: atName(h) }),
                  run: () => { edit(() => white.add(h)); bump(); } };
       } else if (w.startsWith('unlocal:')) {
         const h = w.slice(8);
-        spec = { text: `解除 ${atName(h)}`, title: `この端末の ${atName(h)} の先行版扱いを解除する`,
+        spec = { text: fmt(T.unlocalAt, { h: atName(h) }), title: fmt(T.unlocalAtTitle, { h: atName(h) }),
                  run: () => { edit(() => local.delete(h)); forgetRevealed(h); bump(); } };
-      } else spec = BTN[w];
+      } else spec = B[w];
       b.textContent = (bar.classList.contains('tg-side') && spec.sideText) || spec.text; b.title = spec.title || '';
       if (spec.title) b.setAttribute('aria-label', spec.title);   // 表示は短く、読み上げは title と同じ全文
       if (spec.disabled) b.disabled = true;
@@ -964,7 +1077,7 @@
   }
   // 左下のボタンの下に敷く色。X のテーマ（白・薄暗い・黒）で変わるので、リストを判定し直すたびに読み直す
   const syncTheme = () => { if (SITE === 'x' && document.body) document.documentElement.style.setProperty('--tg-bg', getComputedStyle(document.body).backgroundColor); };
-  function bump() { version++; syncTheme(); scan(); }
+  function bump() { version++; syncTheme(); syncLang(); scan(); }
 
   let queued = false;
   new MutationObserver(() => {
@@ -1016,28 +1129,31 @@
   function openPanel() {
     document.getElementById('tg-panel')?.remove();
     const dim = text => h('span', { style: 'opacity:.6' }, text);
-    const el = h('div', { id: 'tg-panel' },
-      h('b', null, 'もちもちワンクッション'), ' ',
-      dim(`${VERSION ? 'v' + VERSION + ' · ' : ''}配布リスト ${DIST.size} 件 (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})`),
-      h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), ' 配布リストを使う'),
-      h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), ' fusetter / poipiku / privatter リンクがある投稿はぼかさない'),
-      h('label', null, h('input', { type: 'checkbox', id: 'tg-yt' }), ' YouTube でも使う（動画のサムネイルとタイトルをぼかす）'),
-      h('label', null, '表示までのクリック数 ',
-        h('select', { id: 'tg-clicks' }, ...[1, 2, 3, 4, 5].map(n => h('option', null, String(n)))), ' ',
-        dim('2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる')),
-      h('label', null, '先行版扱い（この端末のみ・1行1アカウント） ', dim('YouTube は yt:@ハンドル')), h('textarea', { id: 'tg-local' }),
-      h('label', null, '常に表示（この端末のみ）'), h('textarea', { id: 'tg-white' }),
-      h('div', { className: 'row' },
-        h('button', { id: 'tg-refresh' }, '配布リストを今すぐ更新'),
-        h('button', { id: 'tg-reset-rep' }, '報告履歴をクリア'),
-        SEND_MODE !== 'form' && h('button', { id: 'tg-pend' }, '保留中の報告をコピー')),
-      h('div', { className: 'row' },
-        h('button', { id: 'tg-save' }, '保存'),
-        h('button', { id: 'tg-close', style: 'margin-left:auto' }, '閉じる')));
-    document.body.appendChild(el);
     pull();   // 他のタブの変更を反映してから表示する
+    const opt = (value, text) => { const o = h('option', null, text); o.value = value; return o; };
+    const el = h('div', { id: 'tg-panel' },
+      h('b', null, T.title), ' ',
+      dim(`${VERSION ? 'v' + VERSION + ' · ' : ''}${fmt(T.listCount, { n: DIST.size })} (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})`),
+      h('label', null, T.lang, h('select', { id: 'tg-lang' }, opt('auto', T.langAuto), ...LANGS.map(l => opt(l, LANG_NAMES[l])))),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), T.useDist),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), T.cushion),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-yt' }), T.useYt),
+      h('label', null, T.clicks,
+        h('select', { id: 'tg-clicks' }, ...[1, 2, 3, 4, 5].map(n => h('option', null, String(n)))), ' ',
+        dim(T.clicksHint)),
+      h('label', null, T.localLabel, dim(T.localHint)), h('textarea', { id: 'tg-local' }),
+      h('label', null, T.whiteLabel), h('textarea', { id: 'tg-white' }),
+      h('div', { className: 'row' },
+        h('button', { id: 'tg-refresh' }, T.refresh),
+        REPORT && h('button', { id: 'tg-reset-rep' }, T.clearRep),
+        REPORT && SEND_MODE !== 'form' && h('button', { id: 'tg-pend' }, T.copyPend)),
+      h('div', { className: 'row' },
+        h('button', { id: 'tg-save' }, T.save),
+        h('button', { id: 'tg-close', style: 'margin-left:auto' }, T.close)));
+    document.body.appendChild(el);
     // 開いた時点の内容。保存のときは、ここから変えた分だけを最新の保存値に当てる
     const l0 = new Set(local), w0 = new Set(white), c0 = { ...cfg }, k0 = clicksOf();
+    el.querySelector('#tg-lang').value = LANGS.includes(cfg.lang) ? cfg.lang : 'auto';
     el.querySelector('#tg-dist').checked = cfg.dist;
     el.querySelector('#tg-cushion').checked = cfg.cushion;
     el.querySelector('#tg-yt').checked = !!cfg.yt;
@@ -1052,36 +1168,40 @@
     };
     el.querySelector('#tg-save').onclick = () => {
       const dist = el.querySelector('#tg-dist').checked, cushion = el.querySelector('#tg-cushion').checked, yt = el.querySelector('#tg-yt').checked;
+      const lang = el.querySelector('#tg-lang').value, lang0 = LANGS.includes(c0.lang) ? c0.lang : 'auto';
       const clicks = Number(el.querySelector('#tg-clicks').value), n0 = clicksOf();
       const l1 = new Set(lines(el.querySelector('#tg-local').value)), w1 = new Set(lines(el.querySelector('#tg-white').value));
       edit(() => {
         if (dist !== c0.dist) cfg.dist = dist;
         if (cushion !== c0.cushion) cfg.cushion = cushion;
         if (yt !== !!c0.yt) cfg.yt = yt;
+        if (lang !== lang0) cfg.lang = lang;
         if (clicks !== k0) cfg.clicks = clicks;
         applyDiff(local, l0, l1); applyDiff(white, w0, w1);
       });
+      if (lang !== lang0) pull();   // 言語は pull() が決める（edit の中の pull は変更前に走っている）
       if (clicksOf() !== n0) steps.clear();   // 段階の数が変わったら、途中まで押した記録は最初から
       bump(); el.remove();
       fetchRemote(false);   // YouTube を入にした直後など。期限内なら何もしない
     };
     el.querySelector('#tg-refresh').onclick = () => { fetchRemote(true); el.remove(); };
-    el.querySelector('#tg-reset-rep').onclick = () => {
+    if (el.querySelector('#tg-reset-rep')) el.querySelector('#tg-reset-rep').onclick = () => {
       edit(() => { for (const k of Object.keys(reported)) delete reported[k]; });
       bump();
     };
     if (el.querySelector('#tg-pend')) el.querySelector('#tg-pend').onclick = () => {
       const pend = store.get('tg_pending', []);
       navigator.clipboard.writeText(JSON.stringify(pend, null, 2));
-      alert(`${pend.length} 件をコピーしました`);
+      alert(fmt(T.copied, { n: pend.length }));
     };
     el.querySelector('#tg-close').onclick = () => el.remove();
   }
-  GM_registerMenuCommand('設定を開く', openPanel);
+  // メニューの文言は読込時の言語（言語を変えたあとは、次の読込から）
+  GM_registerMenuCommand(T.openSettings, openPanel);
 
   // 端末 ID（報告に付くランダムな ID）は消さない。作り直したければスクリプトを入れ直す
-  GM_registerMenuCommand('設定とリストを初期化', () => {
-    if (!confirm('設定・この端末のリスト・報告履歴・取得したリストを削除します。端末 ID（報告に付くランダムな ID）は残ります。よろしいですか？')) return;
+  GM_registerMenuCommand(T.reset, () => {
+    if (!confirm(T.resetConfirm)) return;
     // 空の値はキーごとに型を合わせる（tg_reported を配列にすると、以後の報告履歴が保存されなくなる）
     const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}', tg_yt_ch: '{}' };
     for (const [k, v] of Object.entries(empty)) GM_setValue(k, v);

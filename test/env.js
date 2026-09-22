@@ -6,6 +6,9 @@ const { webcrypto } = require('crypto');
 
 const SCRIPT = process.argv[2] || path.join(__dirname, '..', 'trickcal-guard.user.js');
 const code = fs.readFileSync(SCRIPT, 'utf8');
+// 公開ビルドには報告の送信先が無い。試験では埋めて報告の流れも確かめる（entry.ID は試験用の値）
+const FORM = { url: 'https://docs.google.com/forms/d/e/TEST/formResponse', fields: { user: 'entry.2120562442', reposter: 'entry.307293834', link: 'entry.1477113937', date: 'entry.2050821820', text: 'entry.1290347790', imgs: 'entry.1028905437', iid: 'entry.1421019080' } };
+const withForm = src => src.replace("const FORM_URL = '';", `const FORM_URL = ${JSON.stringify(FORM.url)};`).replace('const FORM_FIELDS = {};', `const FORM_FIELDS = ${JSON.stringify(FORM.fields)};`);
 const version = (code.match(/@version\s+(\S+)/) || [])[1];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -17,6 +20,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // opts.remote: 配布リスト GET への応答を返す関数。{ status, responseText } | 'error' | 'timeout'。未指定なら応答なし
 // opts.clock : { now } を渡すとスクリプトから見える Date.now() がこの値になる
 // opts.url   : 開いているページの URL。未指定なら X
+// opts.lang  : ブラウザの言語（navigator.language）。未指定なら 'ja'（既存の検査は日本語の文言で書いてある）
+// opts.public: true なら報告の送信先を埋めない（公開ビルドそのまま）
 // opts.narrow: { matches } を渡すと matchMedia('(max-width: 500px)') の結果になる。narrow.set(v) で切り替えて change を届ける
 // opts.oembed: 動画 ID を受けて oEmbed の応答を返す関数。ハンドルの文字列（'ハンドル|表示名' も可） | 'error' | 'hang'（応答なし） | <status 番号>。未指定なら通信エラー
 // スクリプトの setInterval は実際には動かさず、tick() で手動で一回ぶん回す
@@ -47,6 +52,7 @@ async function boot(html, gm, opts = {}) {
   w.setTimeout = (fn, ms, ...a) => (ms >= 1000 ? (longTimers.set(--longId, fn), longId) : realSet(fn, ms, ...a));
   w.clearTimeout = id => (id < 0 ? longTimers.delete(id) : realClear(id));
   if (opts.clock) w.Date.now = () => opts.clock.now;
+  Object.defineProperty(w.navigator, 'language', { configurable: true, get: () => opts.lang || 'ja' });
   if (opts.narrow) {
     const ls = [];
     const mql = { get matches() { return !!opts.narrow.matches; }, addEventListener: (t, fn) => ls.push(fn) };
@@ -102,7 +108,7 @@ async function boot(html, gm, opts = {}) {
     ...(opts.noInfo ? {} : { GM_info: { script: { version } } }),
   });
   if (!w.crypto || !w.crypto.randomUUID) Object.defineProperty(w, 'crypto', { value: webcrypto });
-  w.eval(code);
+  w.eval(opts.public ? code : withForm(code));
   await sleep(80);
   // within: 投稿を絞るセレクタ（例 '#a'）。省略するとページ全体
   const btns = within => [...w.document.querySelectorAll(`${within ? within + ' ' : ''}.tg-btn`)];
