@@ -2,7 +2,7 @@
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:en      Trickcal One-Cushion (spoiler blur for X and YouTube)
 // @namespace    tg-guard
-// @version      0.4.7
+// @version      0.4.8
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @description:en For players of the global version of Trickcal: blurs posts on X and video thumbnails on YouTube from accounts that post content from the advance (Korean) version, and shows them when you click. Judged per account, not by keywords. The interface is in Japanese.
 // @author       anonymous
@@ -204,6 +204,7 @@
   function fetchRemote(force) {
     if (!REMOTE_URL) return;
     if (SITE === 'yt' && !cfg.yt) return;   // YouTube では、設定を入にするまで何もしない
+    if (!force && !cfg.dist) return;         // 「配布リストを使う」が切なら、自動では取りに行かない（手動更新は通す）
     if (loadRemoteCache()) bump();   // 他のタブが先に更新していれば、取りに行かずそれを使う
     const now = Date.now();
     if (!force) {
@@ -704,14 +705,21 @@
     } catch (err) { log('lookup failed', v.id, err); return ''; }
     finally { clearTimeout(timer); }
   }
-  // 引けなかったときは ''（保存しない。そのカードはぼかさず、次に読み込んだときにまた引く）
+  // 引けなかったときは ''（保存しない。そのカードはぼかさない）。同じ動画は YT_FAIL_RETRY のあいだ引き直さず、それを過ぎたら引き直す。
+  // 再生ページの判定は走査のたびに引きに来るので、間隔を置かないと同じ動画に何度も問い合わせてしまう
+  const YT_FAIL_RETRY = 60 * 1000;
+  const ytFailed = new Map();        // 動画 ID -> 引けなかった時刻
   function ytLookup(v) {
     if (ytVid.has(v.id)) return Promise.resolve(ytVid.get(v.id));
+    const failedAt = ytFailed.get(v.id);
+    if (failedAt && Date.now() - failedAt < YT_FAIL_RETRY) return Promise.resolve('');
     let p = ytInflight.get(v.id);
     if (!p) {
       p = new Promise(res => {
         ytQueue.push(() => ytFetchHandle(v).then(hd => {
-          if (hd) { ytVid.set(v.id, hd); ytInflight.delete(v.id); if (!ytFlushTimer) ytFlushTimer = setTimeout(ytFlush, 500); }
+          ytInflight.delete(v.id);
+          if (hd) { ytVid.set(v.id, hd); ytFailed.delete(v.id); if (!ytFlushTimer) ytFlushTimer = setTimeout(ytFlush, 500); }
+          else ytFailed.set(v.id, Date.now());
           res(hd);
         }));
         ytPump();
@@ -1072,9 +1080,9 @@
   GM_registerMenuCommand('設定を開く', openPanel);
 
   GM_registerMenuCommand('全データを初期化', () => {
-    if (!confirm('ローカルのリスト・報告履歴をすべて削除します。よろしいですか？')) return;
+    if (!confirm('ローカルのリスト・報告履歴・端末 ID をすべて削除します。よろしいですか？')) return;
     // 空の値はキーごとに型を合わせる（tg_reported を配列にすると、以後の報告履歴が保存されなくなる）
-    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}', tg_yt_ch: '{}' };
+    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}', tg_yt_ch: '{}', tg_iid: '' };   // 端末 ID は再読込で作り直される
     for (const [k, v] of Object.entries(empty)) GM_setValue(k, v);
     GM_setValue('tg_remote_next', 0);
     GM_setValue('tg_remote_busy', 0);

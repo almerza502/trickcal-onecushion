@@ -152,6 +152,20 @@ main(async () => {
   check('H3 常に表示にすると、そのチャンネルは全部ぼかさない。「戻す」が出る', !blurred(t, '#shA') && same(t.texts('#shA'), ['戻す']) && JSON.parse(t.w.GM_getValue('tg_white')).includes('yt:@tg_test_a'), t.texts('#shA'));
   t.close();
 
+  // 引けなかった動画は、しばらくしてから引き直す（同じページの中でも）
+  const gm2 = on(); gm2.set('tg_local', '["yt:@tg_test_a"]');
+  const clock = { now: 1_800_000_000_000 };
+  t = await boot(HTML, gm2, { url: URL, oembed, clock });
+  const nx = () => t.fetches.filter(f => f.id === V.x1).length;
+  check('J1 準備: 引けなかった', nx() === 1 && !blurred(t, '#shX'), nx());
+  await t.click('先行版扱い', '#sB'); await t.sleep(80);   // 全件を判定し直す
+  check('J2 直後に判定し直しても引き直さない', nx() === 1 && !blurred(t, '#shX'), nx());
+  clock.now += 61 * 1000; OWNER[V.x1] = 'tg_test_a';
+  await t.click('解除', '#sB'); await t.sleep(80);
+  check('J3 しばらくたってから判定し直したら引き直す。今度は引けたのでぼかす', nx() === 2 && blurred(t, '#shX'), [nx(), blurred(t, '#shX')]);
+  OWNER[V.x1] = 'error';
+  t.close();
+
   // X では YouTube の処理は動かない
   t = await boot(HTML, on(), { oembed });
   check('I1 X では YouTube のカードに触らない', !q(t, '[data-tg-card]') && t.fetches.length === 0);

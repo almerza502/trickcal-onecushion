@@ -96,6 +96,24 @@ main(async () => {
     t1.close(); t2.close();
   }
 
+  // ── P. 「配布リストを使う」が切のときは、自動では取りに行かない
+  gm = new Map([['tg_cfg', JSON.stringify({ dist: false })]]); clock = { now: T0 }; res = csv('tg_test_a');
+  t = await boot(HTML, gm, { clock, remote: () => res });
+  check('P1 読込時に取りに行かない', t.gets.length === 0 && !blurred(t, '#a'), t.gets.length);
+  clock.now = T0 + 7 * HOUR; await t.tick();
+  t.w.document.dispatchEvent(new t.w.Event('visibilitychange')); await t.sleep(50);
+  check('P2 定期確認でも、タブに戻ってきたときでも取りに行かない', t.gets.length === 0, t.gets.length);
+  t.menu['設定を開く']();
+  t.w.document.querySelector('#tg-refresh').click(); await t.sleep(80);
+  check('P3 手動更新は取りに行く（明示の操作）。ただし判定には使わない', t.gets.length === 1 && !blurred(t, '#a'), [t.gets.length, blurred(t, '#a')]);
+  t.menu['設定を開く']();
+  t.w.document.querySelector('#tg-dist').checked = true;
+  t.w.document.querySelector('#tg-save').click(); await t.sleep(80);
+  check('P4 入にすると、取ってあったリストでその場で判定する', blurred(t, '#a') && t.gets.length === 1, [blurred(t, '#a'), t.gets.length]);
+  clock.now += 7 * HOUR; await t.tick();
+  check('P5 入にしたあとは期限切れで取り直す', t.gets.length === 2, t.gets.length);
+  t.close();
+
   // ── M. 「配布リストを今すぐ更新」は期限に関係なく取りに行く
   gm = new Map(); clock = { now: T0 }; res = csv('tg_test_a');
   t = await boot(HTML, gm, { clock, remote: () => res });
