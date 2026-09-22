@@ -2,7 +2,7 @@
 // @name         トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:en      Trickcal One-Cushion (spoiler blur for X and YouTube)
 // @namespace    tg-guard
-// @version      0.4.8
+// @version      0.4.9
 // @description  トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。「報告」ボタンを押したときだけ、その投稿の情報を送信します。
 // @description:en For players of the global version of Trickcal: blurs posts on X and video thumbnails on YouTube from accounts that post content from the advance (Korean) version, and shows them when you click. Judged per account, not by keywords. The interface is in Japanese.
 // @author       anonymous
@@ -1079,10 +1079,11 @@
   }
   GM_registerMenuCommand('設定を開く', openPanel);
 
-  GM_registerMenuCommand('全データを初期化', () => {
-    if (!confirm('ローカルのリスト・報告履歴・端末 ID をすべて削除します。よろしいですか？')) return;
+  // 端末 ID（報告に付くランダムな ID）は消さない。作り直したければスクリプトを入れ直す
+  GM_registerMenuCommand('設定とリストを初期化', () => {
+    if (!confirm('設定・この端末のリスト・報告履歴・取得したリストを削除します。端末 ID（報告に付くランダムな ID）は残ります。よろしいですか？')) return;
     // 空の値はキーごとに型を合わせる（tg_reported を配列にすると、以後の報告履歴が保存されなくなる）
-    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}', tg_yt_ch: '{}', tg_iid: '' };   // 端末 ID は再読込で作り直される
+    const empty = { tg_local: '[]', tg_white: '[]', tg_pending: '[]', tg_cfg: '{}', tg_reported: '{}', tg_remote: 'null', tg_yt_vid: '{}', tg_yt_ch: '{}' };
     for (const [k, v] of Object.entries(empty)) GM_setValue(k, v);
     GM_setValue('tg_remote_next', 0);
     GM_setValue('tg_remote_busy', 0);

@@ -32,14 +32,14 @@ main(async () => {
   s = await load(gm);
   check('A5 再読込後は ✓', s.texts()[0] === '✓', s.texts());
 
-  // ── B. 「全データを初期化」後も報告履歴が保存されるか
+  // ── B. 「設定とリストを初期化」後も報告履歴が保存されるか
   const iid0 = gm.get('tg_iid');
-  s.menu['全データを初期化']();
+  s.menu['設定とリストを初期化']();
   const types = Object.fromEntries(['tg_local', 'tg_white', 'tg_cfg', 'tg_reported', 'tg_pending', 'tg_remote'].map(k => [k, gm.get(k)]));
   check('B0 初期化後の保存値はキーごとの型', JSON.stringify(types) === '{"tg_local":"[]","tg_white":"[]","tg_cfg":"{}","tg_reported":"{}","tg_pending":"[]","tg_remote":"null"}', types);
-  check('B0 端末 ID も消える', gm.get('tg_iid') === '', gm.get('tg_iid'));
+  check('B0 端末 ID は初期化で消えない', !!iid0 && gm.get('tg_iid') === iid0, [iid0 && iid0.slice(0, 8), (gm.get('tg_iid') || '').slice(0, 8)]);
   s = await load(gm);
-  check('B0 再読込で新しい端末 ID が作られる', !!gm.get('tg_iid') && gm.get('tg_iid') !== iid0, [iid0 && iid0.slice(0, 8), (gm.get('tg_iid') || '').slice(0, 8)]);
+  check('B0 再読込後も同じ端末 ID', gm.get('tg_iid') === iid0);
   check('B1 初期化後は「先行版扱い」のみ', JSON.stringify(s.texts()) === '["先行版扱い"]', s.texts());
   await s.click('先行版扱い');
   await s.click('報告');

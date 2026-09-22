@@ -93,6 +93,6 @@ main(async () => {
   t1.w.document.querySelector('#tg-white').value = 'tg_test_c';
   t1.w.document.querySelector('#tg-save').click(); await t1.sleep(80);
   check('I5 パネルの保存も届く', same(t2.texts('#c'), ['戻す']), t2.texts('#c'));
-  t1.menu['全データを初期化'](); await t1.sleep(80);
+  t1.menu['設定とリストを初期化'](); await t1.sleep(80);
   check('I6 初期化も届く', same(t2.texts('#c'), ['先行版扱い']), t2.texts('#c'));
 });

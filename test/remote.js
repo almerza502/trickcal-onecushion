@@ -170,7 +170,7 @@ main(async () => {
   clock.now += 31 * MIN;
   t = await boot(HTML, gm, { clock, remote: () => res });
   check('N2 31 分後に読み込み直しても取りに行かない', t.gets.length === 0, t.gets.length);
-  t.menu['全データを初期化'](); t.close();
+  t.menu['設定とリストを初期化'](); t.close();
   t = await boot(HTML, gm, { clock, remote: () => res });
   check('N3 初期化のあとは取りに行く', t.gets.length === 1, t.gets.length);
 });
