@@ -3,7 +3,7 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.5
+// @version      0.5.6
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the experimental shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
 // @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록·실험적 기능)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
@@ -62,7 +62,8 @@
       unlocalAt: 'Unblur {h}', unlocalAtTitle: 'Stop blurring {h} on this device',
       listCount: 'Shared list: {n}',
       useDist: ' Use the shared list (experimental; for global-version players)', cushion: " Don't blur posts that link to fusetter / poipiku / privatter",
-      useYt: ' Also use on YouTube (blurs thumbnails and titles)',
+      useX: ' Use on X (Twitter)',
+      useYt: ' Use on YouTube (blurs thumbnails and titles)',
       blurText: ' Also blur text and titles (off: only images and videos)',
       clicks: 'Clicks to show ', clicksHint: '2 or more: text first, then images. 3 or more: the blur weakens step by step before that',
       localLabel: 'Blurred accounts (this device only, one per line) ', localHint: 'YouTube: yt:@handle',
@@ -90,7 +91,8 @@
       unlocalAt: '解除 {h}', unlocalAtTitle: 'この端末の {h} の先行版扱いを解除する',
       listCount: '配布リスト {n} 件',
       useDist: ' 配布リストを使う（実験的・グローバル版で遊んでいる人向け）', cushion: ' fusetter / poipiku / privatter リンクがある投稿はぼかさない',
-      useYt: ' YouTube でも使う（動画のサムネイルとタイトルをぼかす）',
+      useX: ' X（Twitter）で使う',
+      useYt: ' YouTube で使う（動画のサムネイルとタイトルをぼかす）',
       blurText: ' 本文・タイトルもぼかす（切: 画像・動画だけ）',
       clicks: '表示までのクリック数 ', clicksHint: '2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる',
       localLabel: '先行版扱い（この端末のみ・1行1アカウント） ', localHint: 'YouTube は yt:@ハンドル',
@@ -117,7 +119,8 @@
       unlocalAt: '해제 {h}', unlocalAtTitle: '이 기기에서 {h}의 가림을 해제합니다',
       listCount: '공유 목록 {n}건',
       useDist: ' 공유 목록 사용 (실험적 기능 · 글로벌판 사용자용)', cushion: ' fusetter / poipiku / privatter 링크가 있는 글은 가리지 않음',
-      useYt: ' YouTube에서도 사용 (썸네일과 제목을 가림)',
+      useX: ' X(트위터)에서 사용',
+      useYt: ' YouTube에서 사용 (썸네일과 제목을 가림)',
       blurText: ' 본문·제목도 가림 (끄면 이미지·동영상만)',
       clicks: '표시까지 클릭 수 ', clicksHint: '2 이상: 본문 → 이미지 순. 3 이상: 그 전에 흐림이 단계적으로 약해짐',
       localLabel: '가리는 계정 (이 기기만, 한 줄에 하나) ', localHint: 'YouTube는 yt:@핸들',
@@ -220,7 +223,7 @@
   const asList = v => (Array.isArray(v) ? v : []);
   const asMap  = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});   // 配列だとキーが保存されないので捨てる
   const CLICKS_DEFAULT = 2;
-  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: true, lang: 'auto', text: true };
+  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, x: true, yt: true, lang: 'auto', text: true };
   const local = new Set();      // ユーザーが自分で追加したアカウント（小文字・平文）。YouTube のチャンネルは 'yt:@ハンドル'
   const white = new Set();      // 常に表示
   const cfg = {};
@@ -300,7 +303,7 @@
   }
   function fetchRemote(force) {
     if (!REMOTE_URL) return;
-    if (SITE === 'yt' && !cfg.yt) return;   // YouTube では、設定を入にするまで何もしない
+    if (!siteOn()) return;   // そのサイトで使わない設定なら、取りに行かない
     if (!force && !cfg.dist) return;         // 「配布リストを使う」が切なら、自動では取りに行かない（手動更新は通す）
     if (loadRemoteCache()) bump();   // 他のタブが先に更新していれば、取りに行かずそれを使う
     const now = Date.now();
@@ -1076,9 +1079,15 @@
     ensureButtons(article);
   }
 
+  // このサイトで使う設定か（X・YouTube それぞれ切れる。切ると判定も通信もしない。設定パネルだけは開ける）
+  const siteOn = () => (SITE === 'yt' ? cfg.yt !== false : cfg.x !== false);
   function scan() {
     if (SITE === 'yt') { ytScan(); return; }
     const arts = document.querySelectorAll(SEL.article);
+    if (!siteOn()) {   // 切: 付けてある印とボタンを全部外す
+      for (const a of arts) if (a.dataset.tgKey) { clearMarks(a); delete a.dataset.tgKey; a.querySelector('.tg-wrap')?.remove(); }
+      return;
+    }
     if (!arts.length) log('article 0 — check SEL.article');
     for (const a of arts) {
       ensureButtons(a);
@@ -1154,6 +1163,7 @@
       h('label', null, T.lang, h('select', { id: 'tg-lang' }, opt('auto', T.langAuto), ...LANGS.map(l => opt(l, LANG_NAMES[l])))),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), T.useDist),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), T.cushion),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-x' }), T.useX),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-yt' }), T.useYt),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-text' }), T.blurText),
       h('label', null, T.clicks,
@@ -1174,6 +1184,7 @@
     el.querySelector('#tg-lang').value = LANGS.includes(cfg.lang) ? cfg.lang : 'auto';
     el.querySelector('#tg-dist').checked = cfg.dist;
     el.querySelector('#tg-cushion').checked = cfg.cushion;
+    el.querySelector('#tg-x').checked = cfg.x !== false;
     el.querySelector('#tg-yt').checked = !!cfg.yt;
     el.querySelector('#tg-text').checked = blurText();
     el.querySelector('#tg-clicks').value = String(clicksOf());
@@ -1189,12 +1200,14 @@
       const dist = el.querySelector('#tg-dist').checked, cushion = el.querySelector('#tg-cushion').checked, yt = el.querySelector('#tg-yt').checked;
       const lang = el.querySelector('#tg-lang').value, lang0 = LANGS.includes(c0.lang) ? c0.lang : 'auto';
       const text = el.querySelector('#tg-text').checked, text0 = c0.text !== false;
+      const x = el.querySelector('#tg-x').checked, x0 = c0.x !== false;
       const clicks = Number(el.querySelector('#tg-clicks').value), n0 = clicksOf();
       const l1 = new Set(lines(el.querySelector('#tg-local').value)), w1 = new Set(lines(el.querySelector('#tg-white').value));
       edit(() => {
         if (dist !== c0.dist) cfg.dist = dist;
         if (cushion !== c0.cushion) cfg.cushion = cushion;
         if (yt !== !!c0.yt) cfg.yt = yt;
+        if (x !== x0) cfg.x = x;
         if (text !== text0) cfg.text = text;
         if (lang !== lang0) cfg.lang = lang;
         if (clicks !== k0) cfg.clicks = clicks;
