@@ -119,8 +119,11 @@ main(async () => {
   t = await boot(HTML, gm, { clock, remote: () => res });
   res = csv('tg_test_b');
   t.menu['設定を開く']();
+  t.w.document.querySelector('#tg-dist').checked = false;   // 保存する前の変更
   t.w.document.querySelector('#tg-refresh').click(); await t.sleep(80);
   check('M1 手動更新', t.gets.length === 2 && !blurred(t, '#a') && blurred(t, '#b'), [t.gets.length, blurred(t, '#a'), blurred(t, '#b')]);
+  const pn = t.w.document.querySelector('#tg-panel');
+  check('M2 手動更新でパネルは閉じない。見出しが書き直され、保存する前の変更も残る', !!pn && pn.querySelector('span').textContent.includes('(remote ·') && pn.querySelector('#tg-dist').checked === false, pn && pn.querySelector('span').textContent);
   t.close();
 
   // ── O. 応答がまったく来ない: 自前の時間切れで中断し、通信エラーと同じく 30 分後に再試行

@@ -3,7 +3,7 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.4
+// @version      0.5.5
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the experimental shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
 // @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록·실험적 기능)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
@@ -1090,7 +1090,8 @@
   }
   // 左下のボタンの下に敷く色。X のテーマ（白・薄暗い・黒）で変わるので、リストを判定し直すたびに読み直す
   const syncTheme = () => { if (SITE === 'x' && document.body) document.documentElement.style.setProperty('--tg-bg', getComputedStyle(document.body).backgroundColor); };
-  function bump() { version++; syncTheme(); syncLang(); scan(); }
+  let panelHead = null;   // 開いている設定パネルの見出し。配布リストが入れ替わったら書き直す
+  function bump() { version++; syncTheme(); syncLang(); scan(); if (panelHead && panelHead.isConnected) panelHead.textContent = headText(); }
 
   let queued = false;
   new MutationObserver(() => {
@@ -1139,14 +1140,17 @@
     const d = new Date(ts), p = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
+  const headText = () => `${VERSION ? 'v' + VERSION + ' · ' : ''}${fmt(T.listCount, { n: DIST.size })} (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})`;
   function openPanel() {
     document.getElementById('tg-panel')?.remove();
     const dim = text => h('span', { style: 'opacity:.6' }, text);
     pull();   // 他のタブの変更を反映してから表示する
     const opt = (value, text) => { const o = h('option', null, text); o.value = value; return o; };
+    const headEl = dim(headText());
+    panelHead = headEl;
     const el = h('div', { id: 'tg-panel' },
       h('b', null, T.title), ' ',
-      dim(`${VERSION ? 'v' + VERSION + ' · ' : ''}${fmt(T.listCount, { n: DIST.size })} (${DIST_SRC}${DIST_TS ? ' · ' + fmtTime(DIST_TS) : ''})`),
+      headEl,
       h('label', null, T.lang, h('select', { id: 'tg-lang' }, opt('auto', T.langAuto), ...LANGS.map(l => opt(l, LANG_NAMES[l])))),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), T.useDist),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), T.cushion),
@@ -1201,7 +1205,11 @@
       bump(); el.remove();
       fetchRemote(false);   // YouTube を入にした直後など。期限内なら何もしない
     };
-    el.querySelector('#tg-refresh').onclick = () => { fetchRemote(true); el.remove(); };
+    el.querySelector('#tg-refresh').onclick = () => {
+      headEl.textContent = headText() + ' …';
+      fetchRemote(true);
+      setTimeout(() => { if (headEl.isConnected) headEl.textContent = headText(); }, REQ_TIMEOUT + 1000);
+    };
     if (el.querySelector('#tg-reset-rep')) el.querySelector('#tg-reset-rep').onclick = () => {
       edit(() => { for (const k of Object.keys(reported)) delete reported[k]; });
       bump();
