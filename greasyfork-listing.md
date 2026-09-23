@@ -19,7 +19,7 @@ A spoiler cushion for Trickcal players, for X (Twitter) and YouTube. It blurs po
 - The "…" menu still works on blurred posts, so you can mute or block as usual.
 - Posts that link to fusetter / poipiku / privatter are not blurred.
 - Not keyword based, so posts with no text are blurred too.
-- Your own lists (blur / always show) stay on your device. The shared list is experimental and can be turned off.
+- Your own lists (blur / always show) stay on your device. The shared list is for global-version players, experimental, and can be turned off.
 - Interface in English, Japanese and Korean. Follows the browser language; changeable in settings.
 
 ### How to use
@@ -51,7 +51,7 @@ YouTube でも同じように、チャンネル単位で動画のサムネイル
 - ぼかしたままでも「…」メニューからミュート・ブロックできる
 - ふせったー・ポイピク・privatter のリンクがある投稿はぼかさない
 - キーワード判定ではないので、テキストのない絵の投稿もぼかせる。ミュートワードでは防げない画像のネタバレ対策に
-- 配布リスト（実験的）は自動更新。アカウント名は平文では持たず、ハッシュ値だけを配布
+- 配布リスト（実験的・グローバル版で遊んでいる人向け）は自動更新。アカウント名は平文では持たず、ハッシュ値だけを配布
 - 自分でアカウントを追加・除外できる（端末内に保存）。配布リストを使わない設定も可能
 - YouTube（初期設定で入。設定で切にできる）: 検索結果・ホーム・再生ページの横の一覧・Shorts の棚で、サムネイルとタイトルをぼかす。判定はチャンネル単位で、チャンネル名は見える（チャンネル名の出ない Shorts は、ぼかしの上にチャンネル名を出す）。ぼかしている間はカーソルを乗せても自動再生しない。自動再生や Shorts の送りでそのチャンネルの動画が始まったときは、止めてぼかす（クリックで再生）
 - 表示は日本語・英語・韓国語。ブラウザの言語に合わせ、設定で変えられる
@@ -87,7 +87,7 @@ YouTube では、チャンネルへのリンクが無い動画カード（Shorts
 - 가려진 글에서도 「…」 메뉴는 그대로 쓸 수 있습니다.
 - fusetter / poipiku / privatter 링크가 있는 글은 가리지 않습니다.
 - 키워드 판정이 아니라서 글자가 없는 그림 글도 가립니다.
-- 직접 만든 목록(가리기 / 항상 표시)은 기기 안에만 저장됩니다. 공유 목록은 실험적 기능이며 끌 수 있습니다.
+- 직접 만든 목록(가리기 / 항상 표시)은 기기 안에만 저장됩니다. 공유 목록은 글로벌판 사용자용 실험적 기능이며, 끌 수 있습니다.
 - 한국어·영어·일본어 표시. 브라우저 언어를 따르고, 설정에서 바꿀 수 있습니다.
 
 ### 사용법
