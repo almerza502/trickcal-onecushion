@@ -23,7 +23,7 @@ A spoiler cushion for Trickcal players, for X (Twitter) and YouTube. It blurs po
 
 ### How to use
 1. Install Tampermonkey and this script, then open X or YouTube.
-2. Press "Blur" on an account you want blurred. On X the button is at the right end of the row under the post (on narrow screens, at the post's lower left). On YouTube it appears at the lower right of a video card when you hover. This is a device-only setting; nothing is sent.
+2. Press "Blur" on an account you want blurred. On X the button is at the right end of the row under the post (on narrow screens, at the post's lower left). On YouTube it appears at the lower right of a video card when you hover. This is a device-only setting.
 3. Settings: Tampermonkey menu → "Open settings".
 
 ### Data
@@ -56,7 +56,7 @@ This script sends nothing to the author. It fetches the shared list from a publi
 
 ### 使い方
 1. Tampermonkey とこのスクリプトをインストールして、X を開く
-2. 自分でぼかしたいアカウントは「先行版扱い」を押す。ボタンは投稿の下の並び（返信・リポスト・いいね）の右端に小さく出ます（幅の狭い画面では投稿の左下）。この端末だけの設定で、送信はされません
+2. 自分でぼかしたいアカウントは「先行版扱い」を押す。ボタンは投稿の下の並び（返信・リポスト・いいね）の右端に小さく出ます（幅の狭い画面では投稿の左下）。この端末だけの設定です
 3. 設定は Tampermonkey メニュー →「設定を開く」
 4. YouTube でも使うときは、設定で「YouTube でも使う」を入にする。「先行版扱い」は動画のカードにカーソルを乗せると右下に出ます
 
@@ -89,7 +89,7 @@ YouTube では、チャンネルへのリンクが無い動画カード（Shorts
 
 ### 사용법
 1. Tampermonkey와 이 스크립트를 설치하고 X나 YouTube를 엽니다.
-2. 가리고 싶은 계정에서 「가리기」를 누릅니다. X에서는 글 아래 줄(답글·리포스트·좋아요)의 오른쪽 끝에 작게 나오고(좁은 화면에서는 글의 왼쪽 아래), YouTube에서는 동영상 카드에 마우스를 올리면 오른쪽 아래에 나옵니다. 이 기기에만 저장되고, 아무것도 전송되지 않습니다.
+2. 가리고 싶은 계정에서 「가리기」를 누릅니다. X에서는 글 아래 줄(답글·리포스트·좋아요)의 오른쪽 끝에 작게 나오고(좁은 화면에서는 글의 왼쪽 아래), YouTube에서는 동영상 카드에 마우스를 올리면 오른쪽 아래에 나옵니다. 이 기기에만 저장됩니다.
 3. 설정은 Tampermonkey 메뉴 → 「설정 열기」.
 
 ### 데이터

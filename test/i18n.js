@@ -23,7 +23,7 @@ main(async () => {
   let t = await boot(HTML, local(), { post: 'ok', lang: 'en-US' });
   check('L1 英語のブラウザ: 英語の文言', same(t.texts('#u'), ['Blur']) && same(t.texts('#a'), ['Report', 'Unblur']), [t.texts('#u'), t.texts('#a')]);
   check('L1 ぼかしの文言も英語', lastCss(t).includes("content: 'May contain spoilers — Click to show';") && lastCss(t).includes("content: 'May contain spoilers — ' attr(data-tg-left) ' more clicks to show';"), lastCss(t).slice(0, 200));
-  check('L1 title も英語', q(t, '#u .tg-btn').title === 'Blur this account on this device (nothing is sent)', q(t, '#u .tg-btn').title);
+  check('L1 title も英語', q(t, '#u .tg-btn').title === 'Blur this account on this device', q(t, '#u .tg-btn').title);
   t.menu['Open settings']();
   check('L1 パネルとメニューも英語。言語の選択は「自動」', !!q(t, '#tg-panel') && q(t, '#tg-lang').value === 'auto' && q(t, '#tg-save').textContent === 'Save', [q(t, '#tg-lang') && q(t, '#tg-lang').value]);
   t.close();
