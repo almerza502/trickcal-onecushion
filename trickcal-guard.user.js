@@ -3,7 +3,7 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.0
+// @version      0.5.1
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
 // @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
@@ -217,7 +217,7 @@
   const asList = v => (Array.isArray(v) ? v : []);
   const asMap  = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});   // 配列だとキーが保存されないので捨てる
   const CLICKS_DEFAULT = 2;
-  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: false, lang: 'auto' };
+  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: true, lang: 'auto' };
   const local = new Set();      // ユーザーが自分で追加したアカウント（小文字・平文）。YouTube のチャンネルは 'yt:@ハンドル'
   const white = new Set();      // 常に表示
   const cfg = {};

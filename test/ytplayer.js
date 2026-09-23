@@ -106,7 +106,7 @@ main(async () => {
   t.close();
 
   // 設定が切なら何もしない。X でも何もしない
-  t = await boot(HTML, new Map([['tg_local', '["yt:@tg_test_a"]']]), { url: `https://www.youtube.com/watch?v=${V.a}`, oembed });
+  t = await boot(HTML, new Map([['tg_local', '["yt:@tg_test_a"]'], ['tg_cfg', JSON.stringify({ yt: false })]]), { url: `https://www.youtube.com/watch?v=${V.a}`, oembed });
   check('T1 設定が切なら掛けない（通信もしない）', !q(t, '[data-tg-pl]') && t.fetches.length === 0);
   t.close();
 });

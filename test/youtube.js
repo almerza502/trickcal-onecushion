@@ -53,12 +53,12 @@ const clickIn = async (t, sel) => {
 main(async () => {
   // 設定が切のとき（既定）は何もしない
   let t = await boot(HTML, new Map([['tg_local', '["yt:@tg_test_a"]']]), { url: URL, oembed });
-  check('A1 既定では YouTube で動かない（ぼかし・通信・ボタンなし）', !q(t, '[data-tg-blur]') && t.fetches.length === 0 && t.gets.length === 0 && t.texts().length === 0, [t.fetches.length, t.gets.length, t.texts()]);
+  check('A1 既定で YouTube でも動く（ぼかし・配布リストの取得）', blurred(t, '#sA') && t.gets.length === 1, [blurred(t, '#sA'), t.gets.length]);
   t.menu['設定を開く']();
-  check('A2 パネルに切替がある（既定は切）', q(t, '#tg-yt') && q(t, '#tg-yt').checked === false);
-  q(t, '#tg-yt').checked = true;
+  check('A2 パネルに切替がある（既定は入）', q(t, '#tg-yt') && q(t, '#tg-yt').checked === true);
+  q(t, '#tg-yt').checked = false;
   q(t, '#tg-save').click(); await t.sleep(120);
-  check('A3 入にして保存すると、その場で動き出す（配布リストも取りに行く）', blurred(t, '#sA') && JSON.parse(t.w.GM_getValue('tg_cfg')).yt === true && t.gets.length === 1, [t.w.GM_getValue('tg_cfg'), t.gets.length]);
+  check('A3 切にして保存すると、その場で止まる（ぼかし・ボタンが消える）', !q(t, '[data-tg-blur]') && t.texts().length === 0 && JSON.parse(t.w.GM_getValue('tg_cfg')).yt === false, [t.texts(), t.w.GM_getValue('tg_cfg')]);
   t.close();
 
   // 端末のリスト

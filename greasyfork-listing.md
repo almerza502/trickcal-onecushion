@@ -13,7 +13,7 @@ A spoiler cushion for Trickcal players, for X (Twitter) and YouTube. It blurs po
 
 ### What it does
 - X: blurs text, images, videos and quote cards; account names stay visible. Judged by the post's author. A quoted post blurs only the quote card.
-- YouTube (turn on in settings): blurs thumbnails and titles in search results, the home page, the watch-page sidebar and the Shorts shelf; channel names stay visible. Blurred cards do not autoplay on hover. If autoplay or the next Short starts a video from a blurred channel, the player pauses and blurs until you click.
+- YouTube (on by default; can be turned off in settings): blurs thumbnails and titles in search results, the home page, the watch-page sidebar and the Shorts shelf; channel names stay visible. Blurred cards do not autoplay on hover. If autoplay or the next Short starts a video from a blurred channel, the player pauses and blurs until you click.
 - Click to show that one post. The default is 2 clicks (text first, then images); adjustable from 1 to 5.
 - The "…" menu still works on blurred posts, so you can mute or block as usual.
 - Posts that link to fusetter / poipiku / privatter are not blurred.
@@ -40,7 +40,7 @@ This script sends nothing to the author. It fetches the shared list from a publi
 グローバル版トリッカル（Trickcal / トリッカル・もちもちほっぺ大作戦）の進度で遊んでいる方向けの、X（Twitter）と YouTube 用のネタバレ回避（ネタバレ防止）スクリプトです。
 先行版（本国版・韓国版）の内容を投稿しているアカウントの投稿をぼかし、クリックしたときだけ表示します。
 ミュートやブロックと違って投稿は消さず、見るかどうかを自分で決める「ワンクッション」を挟むだけです。
-設定を入にすると、YouTube でも同じように、チャンネル単位で動画のサムネイルとタイトルをぼかします。
+YouTube でも同じように、チャンネル単位で動画のサムネイルとタイトルをぼかします。
 
 ### できること
 - 本文・画像・動画・引用カードをぼかす（アカウント名は見える）
@@ -51,14 +51,14 @@ This script sends nothing to the author. It fetches the shared list from a publi
 - キーワード判定ではないので、テキストのない絵の投稿もぼかせる。ミュートワードでは防げない画像のネタバレ対策に
 - 配布リストは自動更新。アカウント名は平文では持たず、ハッシュ値だけを配布
 - 自分でアカウントを追加・除外できる（端末内に保存）。配布リストを使わない設定も可能
-- YouTube（設定で入にする。初期設定は切）: 検索結果・ホーム・再生ページの横の一覧・Shorts の棚で、サムネイルとタイトルをぼかす。判定はチャンネル単位で、チャンネル名は見える（チャンネル名の出ない Shorts は、ぼかしの上にチャンネル名を出す）。ぼかしている間はカーソルを乗せても自動再生しない。自動再生や Shorts の送りでそのチャンネルの動画が始まったときは、止めてぼかす（クリックで再生）
+- YouTube（初期設定で入。設定で切にできる）: 検索結果・ホーム・再生ページの横の一覧・Shorts の棚で、サムネイルとタイトルをぼかす。判定はチャンネル単位で、チャンネル名は見える（チャンネル名の出ない Shorts は、ぼかしの上にチャンネル名を出す）。ぼかしている間はカーソルを乗せても自動再生しない。自動再生や Shorts の送りでそのチャンネルの動画が始まったときは、止めてぼかす（クリックで再生）
 - 表示は日本語・英語・韓国語。ブラウザの言語に合わせ、設定で変えられる
 
 ### 使い方
 1. Tampermonkey とこのスクリプトをインストールして、X を開く
 2. 自分でぼかしたいアカウントは「先行版扱い」を押す。ボタンは投稿の下の並び（返信・リポスト・いいね）の右端に小さく出ます（幅の狭い画面では投稿の左下）。この端末だけの設定です
 3. 設定は Tampermonkey メニュー →「設定を開く」
-4. YouTube でも使うときは、設定で「YouTube でも使う」を入にする。「先行版扱い」は動画のカードにカーソルを乗せると右下に出ます
+4. YouTube では、「先行版扱い」は動画のカードにカーソルを乗せると右下に出ます
 
 ### 送信するデータについて
 このスクリプトは作者に何も送信しません。
@@ -79,7 +79,7 @@ YouTube では、チャンネルへのリンクが無い動画カード（Shorts
 
 ### 할 수 있는 것
 - X: 본문·이미지·동영상·인용 카드를 가립니다. 계정 이름은 보입니다. 판정은 글을 쓴 계정 기준이고, 인용글은 인용 카드만 가립니다.
-- YouTube(설정에서 켬): 검색 결과·홈·재생 페이지 옆 목록·Shorts 선반의 썸네일과 제목을 가립니다. 채널 이름은 보입니다. 가려진 카드는 마우스를 올려도 자동 재생되지 않습니다. 자동 재생이나 Shorts 넘김으로 가린 채널의 영상이 시작되면, 클릭할 때까지 멈추고 가립니다.
+- YouTube(기본 켜짐, 설정에서 끌 수 있음): 검색 결과·홈·재생 페이지 옆 목록·Shorts 선반의 썸네일과 제목을 가립니다. 채널 이름은 보입니다. 가려진 카드는 마우스를 올려도 자동 재생되지 않습니다. 자동 재생이나 Shorts 넘김으로 가린 채널의 영상이 시작되면, 클릭할 때까지 멈추고 가립니다.
 - 클릭하면 그 글만 표시됩니다. 기본은 2번(본문 → 이미지)이고 1~5번으로 바꿀 수 있습니다.
 - 가려진 글에서도 「…」 메뉴는 그대로 쓸 수 있습니다.
 - fusetter / poipiku / privatter 링크가 있는 글은 가리지 않습니다.
