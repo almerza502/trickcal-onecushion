@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Trickcal One-Cushion
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
-// @name:ko      트릭컬 원쿠션 (스포일러 가리기)
+// @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
 // @version      0.5.0
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
