@@ -3,7 +3,7 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.2
+// @version      0.5.3
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the experimental shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
 // @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록·실험적 기능)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
@@ -63,6 +63,7 @@
       listCount: 'Shared list: {n}',
       useDist: ' Use the shared list (experimental)', cushion: " Don't blur posts that link to fusetter / poipiku / privatter",
       useYt: ' Also use on YouTube (blurs thumbnails and titles)',
+      blurText: ' Also blur text and titles (off: only images and videos)',
       clicks: 'Clicks to show ', clicksHint: '2 or more: text first, then images. 3 or more: the blur weakens step by step before that',
       localLabel: 'Blurred accounts (this device only, one per line) ', localHint: 'YouTube: yt:@handle',
       whiteLabel: 'Always show (this device only)',
@@ -90,6 +91,7 @@
       listCount: '配布リスト {n} 件',
       useDist: ' 配布リストを使う（実験的）', cushion: ' fusetter / poipiku / privatter リンクがある投稿はぼかさない',
       useYt: ' YouTube でも使う（動画のサムネイルとタイトルをぼかす）',
+      blurText: ' 本文・タイトルもぼかす（切: 画像・動画だけ）',
       clicks: '表示までのクリック数 ', clicksHint: '2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる',
       localLabel: '先行版扱い（この端末のみ・1行1アカウント） ', localHint: 'YouTube は yt:@ハンドル',
       whiteLabel: '常に表示（この端末のみ）',
@@ -116,6 +118,7 @@
       listCount: '공유 목록 {n}건',
       useDist: ' 공유 목록 사용 (실험적 기능)', cushion: ' fusetter / poipiku / privatter 링크가 있는 글은 가리지 않음',
       useYt: ' YouTube에서도 사용 (썸네일과 제목을 가림)',
+      blurText: ' 본문·제목도 가림 (끄면 이미지·동영상만)',
       clicks: '표시까지 클릭 수 ', clicksHint: '2 이상: 본문 → 이미지 순. 3 이상: 그 전에 흐림이 단계적으로 약해짐',
       localLabel: '가리는 계정 (이 기기만, 한 줄에 하나) ', localHint: 'YouTube는 yt:@핸들',
       whiteLabel: '항상 표시 (이 기기만)',
@@ -217,7 +220,7 @@
   const asList = v => (Array.isArray(v) ? v : []);
   const asMap  = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});   // 配列だとキーが保存されないので捨てる
   const CLICKS_DEFAULT = 2;
-  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: true, lang: 'auto' };
+  const CFG_DEFAULT = { dist: true, cushion: true, clicks: CLICKS_DEFAULT, yt: true, lang: 'auto', text: true };
   const local = new Set();      // ユーザーが自分で追加したアカウント（小文字・平文）。YouTube のチャンネルは 'yt:@ハンドル'
   const white = new Set();      // 常に表示
   const cfg = {};
@@ -523,7 +526,9 @@
     [data-tg-pltitle] { filter: blur(10px); user-select: none; }
     /* サムネイルが左にある横長のカードは、文言をサムネイルの上（左寄せ）に置く */
     ytd-video-renderer[data-tg-blur]::after, ytd-compact-video-renderer[data-tg-blur]::after,
-    yt-lockup-view-model[data-tg-blur]:has(> .ytLockupViewModelHorizontal)::after { left: 8px; transform: translateY(-50%); }` : ''}
+    yt-lockup-view-model[data-tg-blur]:has(> .ytLockupViewModelHorizontal)::after { left: 8px; transform: translateY(-50%); }
+    /* タイトルを表示している段階では、文言をサムネイル側（上）に寄せる */
+    [data-tg-blur][data-tg-text]::after { top: 40%; }` : ''}
     /* タッチ端末: 押しやすい大きさにし、文言を「タップ」にする */
     @media (pointer: coarse) {
       .tg-btn { font-size: 13px; padding: 8px 2px; opacity: .55; }
@@ -588,12 +593,18 @@
   }
   const handlesOf = article => { try { return JSON.parse(article.dataset.tgHandles || '[]'); } catch { return []; } };
   // step = これまでに押した回数。target にその段階の見た目を付ける。全部表示し終える段階なら false を返す
+  // 本文をぼかす設定か。切なら本文は最初から表示（data-tg-text）で、段階は画像・動画だけ
+  const blurText = () => cfg.text !== false;
+  // ぼかすものがあるか。本文をぼかさない設定で画像などが無ければ、何もしない
+  const canBlur = target => blurText() || !!target.querySelector(MEDIA_SEL);
   function applyStep(target, step) {
     const n = clicksOf(), lv = blurLevels(n);
-    const total = n >= 2 && !target.querySelector(MEDIA_SEL) ? n - 1 : n;   // 画像などが無ければ本文の表示で終わり
+    const media = !!target.querySelector(MEDIA_SEL);
+    // 段階の数: 弱める (n-2) 回 + 本文 (ぼかすなら 1) + 画像など (あれば 1)。1 クリックの設定なら 1
+    const total = n >= 2 ? Math.max(1, (n - 2) + (blurText() ? 1 : 0) + (media ? 1 : 0)) : 1;
     if (step >= total) return false;
     target.setAttribute('data-tg-blur', String(lv[Math.min(step, lv.length - 1)]));
-    if (n >= 2 && step >= n - 1) target.setAttribute('data-tg-text', '1'); else target.removeAttribute('data-tg-text');
+    if (!blurText() || (n >= 2 && step >= n - 1)) target.setAttribute('data-tg-text', '1'); else target.removeAttribute('data-tg-text');
     if (total - step > 1) target.setAttribute('data-tg-left', String(total - step)); else target.removeAttribute('data-tg-left');
     return true;
   }
@@ -896,6 +907,7 @@
       card.dataset.tgHandles = JSON.stringify([k]);
       if (card.matches(YT.noName)) card.dataset.tgName = ytCh.get(hd) || '@' + hd;
       if (revealed.has(v.id)) card.dataset.tgRevealed = '1';
+      else if (!canBlur(card)) { /* ぼかすものが無い */ }
       else if (!applyStep(card, steps.get(v.id)?.step || 0)) reveal(card);
     }
     ytButtons(card);
@@ -941,7 +953,7 @@
     if (!player) return;   // まだ出来ていない。次の走査でもう一度
     if (player.getAttribute('data-tg-pl') !== String(ytPl.left)) player.setAttribute('data-tg-pl', String(ytPl.left));
     if (player.getAttribute('data-tg-pl-name') !== ytPl.name) player.setAttribute('data-tg-pl-name', ytPl.name);
-    for (const t of document.querySelectorAll(sel.title)) if (!t.hasAttribute('data-tg-pltitle')) t.setAttribute('data-tg-pltitle', '1');
+    if (blurText()) for (const t of document.querySelectorAll(sel.title)) if (!t.hasAttribute('data-tg-pltitle')) t.setAttribute('data-tg-pltitle', '1');
     for (const v of player.querySelectorAll('video')) { ytGuard(v); ytHold(v); }
   }
   function ytPlayerClear() {
@@ -1058,6 +1070,7 @@
     if (target) {
       article.dataset.tgHandles = JSON.stringify(handles);
       if (id && revealed.has(id)) article.dataset.tgRevealed = '1';
+      else if (!canBlur(target)) { /* 本文だけの投稿で、本文はぼかさない設定 */ }
       else if (!applyStep(target, (id && steps.get(id)?.step) || 0)) reveal(article);
     }
     ensureButtons(article);
@@ -1103,10 +1116,10 @@
     refreshQueued = true;
     setTimeout(() => {
       refreshQueued = false;
-      const l0 = new Set(local), w0 = new Set(white), n0 = clicksOf();
+      const l0 = new Set(local), w0 = new Set(white), n0 = clicksOf(), t0 = blurText();
       pull();
       loadRemoteCache();
-      if (clicksOf() !== n0) steps.clear();   // 段階の数が変わったら、途中まで押した記録は最初から
+      if (clicksOf() !== n0 || blurText() !== t0) steps.clear();   // 段階の数が変わったら、途中まで押した記録は最初から
       for (const h of new Set([...l0, ...local, ...w0, ...white])) {
         if (l0.has(h) !== local.has(h) || w0.has(h) !== white.has(h)) forgetRevealed(h);
       }
@@ -1138,6 +1151,7 @@
       h('label', null, h('input', { type: 'checkbox', id: 'tg-dist' }), T.useDist),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-cushion' }), T.cushion),
       h('label', null, h('input', { type: 'checkbox', id: 'tg-yt' }), T.useYt),
+      h('label', null, h('input', { type: 'checkbox', id: 'tg-text' }), T.blurText),
       h('label', null, T.clicks,
         h('select', { id: 'tg-clicks' }, ...[1, 2, 3, 4, 5].map(n => h('option', null, String(n)))), ' ',
         dim(T.clicksHint)),
@@ -1157,6 +1171,7 @@
     el.querySelector('#tg-dist').checked = cfg.dist;
     el.querySelector('#tg-cushion').checked = cfg.cushion;
     el.querySelector('#tg-yt').checked = !!cfg.yt;
+    el.querySelector('#tg-text').checked = blurText();
     el.querySelector('#tg-clicks').value = String(clicksOf());
     el.querySelector('#tg-local').value = [...local].join('\n');
     el.querySelector('#tg-white').value = [...white].join('\n');
@@ -1169,18 +1184,20 @@
     el.querySelector('#tg-save').onclick = () => {
       const dist = el.querySelector('#tg-dist').checked, cushion = el.querySelector('#tg-cushion').checked, yt = el.querySelector('#tg-yt').checked;
       const lang = el.querySelector('#tg-lang').value, lang0 = LANGS.includes(c0.lang) ? c0.lang : 'auto';
+      const text = el.querySelector('#tg-text').checked, text0 = c0.text !== false;
       const clicks = Number(el.querySelector('#tg-clicks').value), n0 = clicksOf();
       const l1 = new Set(lines(el.querySelector('#tg-local').value)), w1 = new Set(lines(el.querySelector('#tg-white').value));
       edit(() => {
         if (dist !== c0.dist) cfg.dist = dist;
         if (cushion !== c0.cushion) cfg.cushion = cushion;
         if (yt !== !!c0.yt) cfg.yt = yt;
+        if (text !== text0) cfg.text = text;
         if (lang !== lang0) cfg.lang = lang;
         if (clicks !== k0) cfg.clicks = clicks;
         applyDiff(local, l0, l1); applyDiff(white, w0, w1);
       });
       if (lang !== lang0) pull();   // 言語は pull() が決める（edit の中の pull は変更前に走っている）
-      if (clicksOf() !== n0) steps.clear();   // 段階の数が変わったら、途中まで押した記録は最初から
+      if (clicksOf() !== n0 || text !== text0) steps.clear();   // 段階の数が変わったら、途中まで押した記録は最初から
       bump(); el.remove();
       fetchRemote(false);   // YouTube を入にした直後など。期限内なら何もしない
     };
