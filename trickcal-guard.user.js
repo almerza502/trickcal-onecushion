@@ -3,10 +3,10 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.1
-// @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
+// @version      0.5.2
+// @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the experimental shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
-// @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
+// @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록·실험적 기능)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
 // @author       anonymous
 // @license      MIT
 // @match        https://x.com/*
@@ -61,7 +61,7 @@
       whiteAt: 'Always show {h}', whiteAtTitle: 'Always show {h} on this device (exception to the shared list)',
       unlocalAt: 'Unblur {h}', unlocalAtTitle: 'Stop blurring {h} on this device',
       listCount: 'Shared list: {n}',
-      useDist: ' Use the shared list', cushion: " Don't blur posts that link to fusetter / poipiku / privatter",
+      useDist: ' Use the shared list (experimental)', cushion: " Don't blur posts that link to fusetter / poipiku / privatter",
       useYt: ' Also use on YouTube (blurs thumbnails and titles)',
       clicks: 'Clicks to show ', clicksHint: '2 or more: text first, then images. 3 or more: the blur weakens step by step before that',
       localLabel: 'Blurred accounts (this device only, one per line) ', localHint: 'YouTube: yt:@handle',
@@ -88,7 +88,7 @@
       whiteAt: '常に表示 {h}', whiteAtTitle: 'この端末で {h} を常に表示する（配布リストの例外）',
       unlocalAt: '解除 {h}', unlocalAtTitle: 'この端末の {h} の先行版扱いを解除する',
       listCount: '配布リスト {n} 件',
-      useDist: ' 配布リストを使う', cushion: ' fusetter / poipiku / privatter リンクがある投稿はぼかさない',
+      useDist: ' 配布リストを使う（実験的）', cushion: ' fusetter / poipiku / privatter リンクがある投稿はぼかさない',
       useYt: ' YouTube でも使う（動画のサムネイルとタイトルをぼかす）',
       clicks: '表示までのクリック数 ', clicksHint: '2 以上: 本文 → 画像の順。3 以上: その前にぼかしが少しずつ弱くなる',
       localLabel: '先行版扱い（この端末のみ・1行1アカウント） ', localHint: 'YouTube は yt:@ハンドル',
@@ -114,7 +114,7 @@
       whiteAt: '항상 표시 {h}', whiteAtTitle: '이 기기에서 {h}를 항상 표시합니다 (공유 목록 예외)',
       unlocalAt: '해제 {h}', unlocalAtTitle: '이 기기에서 {h}의 가림을 해제합니다',
       listCount: '공유 목록 {n}건',
-      useDist: ' 공유 목록 사용', cushion: ' fusetter / poipiku / privatter 링크가 있는 글은 가리지 않음',
+      useDist: ' 공유 목록 사용 (실험적 기능)', cushion: ' fusetter / poipiku / privatter 링크가 있는 글은 가리지 않음',
       useYt: ' YouTube에서도 사용 (썸네일과 제목을 가림)',
       clicks: '표시까지 클릭 수 ', clicksHint: '2 이상: 본문 → 이미지 순. 3 이상: 그 전에 흐림이 단계적으로 약해짐',
       localLabel: '가리는 계정 (이 기기만, 한 줄에 하나) ', localHint: 'YouTube는 yt:@핸들',
