@@ -16,6 +16,7 @@ A spoiler cushion for Trickcal players, for X (Twitter) and YouTube. It blurs po
 - YouTube: blurs thumbnails and titles in search results, the home page, the watch-page sidebar and the Shorts shelf; channel names stay visible. Blurred cards do not autoplay on hover. If autoplay or the next Short starts a video from a blurred channel, the player pauses and blurs until you click.
 - Click to show that one post. The default is 2 clicks (text first, then images); adjustable from 1 to 5.
 - Optionally leave text and titles visible and blur only images and videos (settings).
+- On a profile page (X) or a channel page (YouTube) that you opened yourself, that account's posts and that channel's videos are not blurred.
 - The "…" menu still works on blurred posts, so you can mute or block as usual.
 - Posts that link to fusetter / poipiku / privatter are not blurred.
 - Not keyword based, so posts with no text are blurred too.
@@ -49,6 +50,7 @@ YouTube でも同じように、チャンネル単位で動画のサムネイル
 - 判定するのは、その投稿を書いたアカウント。リポストで流れてきた投稿も同じ基準で、引用は引用カードだけをぼかす
 - クリックでその投稿だけ表示。初期設定は 2 回（本文 → 画像）で、1〜5 回に変更可能
 - 設定で、本文・タイトルはぼかさず画像・動画だけぼかすこともできる
+- 自分で開いたページ（X のプロフィール、YouTube のチャンネルのページ）では、そのアカウントの投稿・そのチャンネルの動画はぼかさない
 - ぼかしたままでも「…」メニューからミュート・ブロックできる
 - ふせったー・ポイピク・privatter のリンクがある投稿はぼかさない
 - キーワード判定ではないので、テキストのない絵の投稿もぼかせる。ミュートワードでは防げない画像のネタバレ対策に
@@ -86,6 +88,7 @@ YouTube では、チャンネルへのリンクが無い動画カード（Shorts
 - YouTube: 검색 결과·홈·재생 페이지 옆 목록·Shorts 선반의 썸네일과 제목을 가립니다. 채널 이름은 보입니다. 가려진 카드는 마우스를 올려도 자동 재생되지 않습니다. 자동 재생이나 Shorts 넘김으로 가린 채널의 영상이 시작되면, 클릭할 때까지 멈추고 가립니다.
 - 클릭하면 그 글만 표시됩니다. 기본은 2번(본문 → 이미지)이고 1~5번으로 바꿀 수 있습니다.
 - 설정에서 본문·제목은 두고 이미지·동영상만 가리게 할 수도 있습니다.
+- 직접 들어간 페이지(X의 프로필, YouTube의 채널 페이지)에서는 그 계정의 글과 그 채널의 동영상을 가리지 않습니다.
 - 가려진 글에서도 「…」 메뉴는 그대로 쓸 수 있습니다.
 - fusetter / poipiku / privatter 링크가 있는 글은 가리지 않습니다.
 - 키워드 판정이 아니라서 글자가 없는 그림 글도 가립니다.

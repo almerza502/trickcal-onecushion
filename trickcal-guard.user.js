@@ -3,7 +3,7 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.6
+// @version      0.5.7
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the experimental shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
 // @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록·실험적 기능)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
@@ -586,12 +586,13 @@
   //   data-tg-handles  : この投稿で該当したハンドル(JSON)。ぼかし中でも表示後でも保持
   //   data-tg-src      : 投稿者が該当した根拠 'local' | 'dist' | ''
   //   data-tg-revealed : このセッションで表示にした
+  //   data-tg-entered  : 開いたページ（プロフィール・チャンネルのページ）の持ち主のものなので、ぼかしていない
   const BLUR_ATTRS = ['data-tg-blur', 'data-tg-text', 'data-tg-left', 'data-tg-step'];
   function unblur(article) {
     for (const el of [article, ...article.querySelectorAll('[data-tg-blur]')]) BLUR_ATTRS.forEach(a => el.removeAttribute(a));
   }
   function clearMarks(article) {
-    for (const k of ['tgHandles', 'tgSrc', 'tgRevealed', 'tgName']) delete article.dataset[k];
+    for (const k of ['tgHandles', 'tgSrc', 'tgRevealed', 'tgEntered', 'tgName']) delete article.dataset[k];
     unblur(article);
   }
   const handlesOf = article => { try { return JSON.parse(article.dataset.tgHandles || '[]'); } catch { return []; } };
@@ -621,6 +622,26 @@
     if (id) { revealed.set(id, handlesOf(article)); steps.delete(id); }
     refreshButtons(article);
   }
+  // 自分で開いたページ: X はアカウントのプロフィール、YouTube はチャンネルのページ。
+  // そこでは、その持ち主の投稿・動画はぼかさない（表示にしたときと同じ扱いで、ボタンも同じものが出る）。
+  // X は持ち主のハンドル（違えば ''）。投稿のページ（/ハンドル/status/…）は含めない
+  function enteredX() {
+    const [, name, tab] = location.pathname.split('/');
+    return /^[A-Za-z0-9_]{1,15}$/.test(name || '') && tab !== 'status' ? name.toLowerCase() : '';
+  }
+  // YouTube はチャンネルのページなら { handle }（URL にハンドルが無い形なら ''）、違えば null
+  function enteredYt() {
+    const m = location.pathname.match(/^\/(?:@([^/]+)|(?:channel|c|user)\/[^/]+)/);
+    return m ? { handle: m[1] ? ytNorm(m[1]) : '' } : null;
+  }
+  // 判定のキーに足す文字。ページを移ったら判定し直す
+  const enteredKey = () => { if (SITE !== 'yt') return enteredX(); const p = enteredYt(); return p ? 'ch:' + p.handle : ''; };
+  // そこから投稿・動画を開いたら、表示にしたものとして覚える（開いた先でぼかし直さない）
+  function onEnteredClick(el) {
+    if (!el.dataset.tgEntered) return;
+    const id = postIdOf(el);
+    if (id && !revealed.has(id)) revealed.set(id, handlesOf(el));
+  }
   function onBlurClick(article, e) {
     const b = e.target.closest('[data-tg-blur]');
     if (!b || !article.contains(b)) return;
@@ -640,7 +661,7 @@
   function attachClick(article) {
     if (article.dataset.tgClick) return;
     article.dataset.tgClick = '1';
-    article.addEventListener('click', e => onBlurClick(article, e), true);
+    article.addEventListener('click', e => { onEnteredClick(article); onBlurClick(article, e); }, true);
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -893,7 +914,12 @@
     card.dataset.tgVid = v.id;
     card.dataset.tgAuthor = '';
     ytButtons(card);   // 前の動画のボタンが残っていれば、チャンネルが分かるまで消しておく
-    const hd = ytHandleOf(card) || await ytLookup(v);
+    // チャンネルのページでは、チャンネルのリンクが無いカードはそのチャンネルの動画（問い合わせない）
+    const page = enteredYt();
+    let hd = ytHandleOf(card);
+    const entered = !!page && (!hd || hd === page.handle);
+    if (entered) hd = page.handle;
+    else if (!hd) hd = await ytLookup(v);
     if (card.dataset.tgKey !== key) { log('stale, drop', v.id); return; }   // カードの要素は使い回される。待つ間に中身が変わっていたら捨てる
     if (!hd) { ytButtons(card); return; }
     const k = 'yt:@' + hd;
@@ -909,7 +935,8 @@
     if (listed) {
       card.dataset.tgHandles = JSON.stringify([k]);
       if (card.matches(YT.noName)) card.dataset.tgName = ytCh.get(hd) || '@' + hd;
-      if (revealed.has(v.id)) card.dataset.tgRevealed = '1';
+      if (entered) { card.dataset.tgRevealed = '1'; card.dataset.tgEntered = '1'; }
+      else if (revealed.has(v.id)) card.dataset.tgRevealed = '1';
       else if (!canBlur(card)) { /* ぼかすものが無い */ }
       else if (!applyStep(card, steps.get(v.id)?.step || 0)) reveal(card);
     }
@@ -1008,7 +1035,7 @@
       const v = cfg.yt ? ytVideoOf(card) : null;
       if (!v) { if (card.dataset.tgKey) ytClear(card); continue; }
       ytButtons(card);
-      const key = `${version}:${v.id}`;
+      const key = `${version}:${v.id}:${enteredKey()}`;
       if (card.dataset.tgKey === key) continue;
       card.dataset.tgKey = key;
       ytEvaluate(card, v, key);
@@ -1019,7 +1046,7 @@
     window.addEventListener('click', e => {
       if (ytPl && e.target.closest?.('[data-tg-pl]')) { e.preventDefault(); e.stopImmediatePropagation(); ytPlayerClick(); return; }
       const card = e.target.closest?.(YT.card);
-      if (card) onBlurClick(card, e);
+      if (card) { onEnteredClick(card); onBlurClick(card, e); }
     }, true);
     // クッションの間は、プレーヤーの上での押下・ダブルクリック（再生の切り替え・全画面）をページに渡さない
     const onPress = e => { if (ytPl && e.target.closest?.('[data-tg-pl]')) e.stopImmediatePropagation(); };
@@ -1039,7 +1066,7 @@
   // ────────────────────────────────────────────────────────────────
   // 8. 判定ループ
   // ────────────────────────────────────────────────────────────────
-  async function evaluate(article) {
+  async function evaluate(article, key) {
     const p = parts(article);
     const id = idOf(p.link);
     clearMarks(article);
@@ -1064,7 +1091,7 @@
     } catch (err) { console.error('[tg] evaluate failed', err); return; }
     log({ id, author: p.author, reposter: p.reposter, quoted: p.quoted, ha, hq, src });
     // 非同期の間にリストが変わったか、ノードが再利用されていたら捨てる
-    if (article.dataset.tgKey !== `${version}:${id}`) { log('stale, drop', id); return; }
+    if (article.dataset.tgKey !== key) { log('stale, drop', id); return; }
 
     article.dataset.tgSrc = src;
     const whole = ha ? [p.author] : [];
@@ -1072,7 +1099,8 @@
     const handles = whole.length ? whole : (target ? [p.quoted] : []);
     if (target) {
       article.dataset.tgHandles = JSON.stringify(handles);
-      if (id && revealed.has(id)) article.dataset.tgRevealed = '1';
+      if (whole.length && p.author === enteredX()) { article.dataset.tgRevealed = '1'; article.dataset.tgEntered = '1'; }
+      else if (id && revealed.has(id)) article.dataset.tgRevealed = '1';
       else if (!canBlur(target)) { /* 本文だけの投稿で、本文はぼかさない設定 */ }
       else if (!applyStep(target, (id && steps.get(id)?.step) || 0)) reveal(article);
     }
@@ -1091,10 +1119,10 @@
     if (!arts.length) log('article 0 — check SEL.article');
     for (const a of arts) {
       ensureButtons(a);
-      const key = `${version}:${idOf(permalinkOf(a))}`;
+      const key = `${version}:${idOf(permalinkOf(a))}:${enteredKey()}`;
       if (a.dataset.tgKey === key) continue;
       a.dataset.tgKey = key;
-      evaluate(a);
+      evaluate(a, key);
     }
   }
   // 左下のボタンの下に敷く色。X のテーマ（白・薄暗い・黒）で変わるので、リストを判定し直すたびに読み直す
