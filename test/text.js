@@ -78,4 +78,44 @@ main(async () => {
   t1.menu['設定を開く'](); q(t1, '#tg-text').checked = false; q(t1, '#tg-save').click(); await t1.sleep(120);
   check('E1 切に変えると途中経過は最初から、他のタブにも届く', state(t1, '#both') === '28+text/2' && state(t2, '#both') === '28+text/2' && state(t2, '#textonly') === 'shown', [state(t1, '#both'), state(t2, '#both')]);
   t1.close(); t2.close();
+
+  // 画像などは投稿より遅れて付く。本文をぼかさない設定でも、付いた時点でぼかす
+  const LATE = `<!doctype html><body>
+    ${art('late', 'tg_test_a', 11, text + '<div class="slot"></div>')}
+    ${art('lateq', 'tg_test_z', 12, text + quote(text + '<div class="slot"></div>'))}
+    ${art('never', 'tg_test_a', 13, text)}
+    ${art('other', 'tg_test_z', 14, text + '<div class="slot"></div>')}
+  </body>`;
+  const put = async (t, sel) => { q(t, sel + ' .slot').innerHTML = photo; await t.sleep(200); };
+  t = await open({ clicks: 2, text: false }, LATE);
+  // open() は HTML が既定のものでないとき YouTube のリストを入れるので、X のリストを入れ直す
+  t.close();
+  const openX = cfg => boot(LATE, new Map([['tg_local', '["tg_test_a"]'], ['tg_cfg', JSON.stringify(cfg)]]), { post: 'ok' });
+  t = await openX({ clicks: 2, text: false });
+  check('L1 切: 画像がまだ無い投稿は、ぼかさずに待つ', state(t, '#late') === 'shown' && q(t, '#late').hasAttribute('data-tg-pending'), state(t, '#late'));
+  await put(t, '#late');
+  check('L2 切: 画像が後から付いたら、その時点でぼかす', state(t, '#late') === '28+text/1' && !q(t, '#late').hasAttribute('data-tg-pending'), state(t, '#late'));
+  check('L3 切: 引用カードの画像が後から付いても同じ（引用カードだけぼかす）', state(t, '#qbox') === 'shown' && state(t, '#lateq') === 'shown');
+  await put(t, '#lateq');
+  check('L3b', state(t, '#qbox') === '28+text/1' && state(t, '#lateq') === 'shown', [state(t, '#qbox'), state(t, '#lateq')]);
+  await put(t, '#other');
+  check('L4 切: リストに無いアカウントの投稿は、画像が付いてもそのまま', state(t, '#other') === 'shown' && !q(t, '#other').hasAttribute('data-tg-pending'));
+  check('L5 切: 本文だけの投稿は待ったまま（ぼかさない）', state(t, '#never') === 'shown');
+  t.close();
+  t = await openX({ clicks: 2 });
+  check('L6 入: 画像が無くても最初からぼかす（1 段階）', state(t, '#late') === '28/1', state(t, '#late'));
+  await put(t, '#late');
+  check('L7 入: 画像が付いたら段階が増える（本文 → 画像の 2 段階）', state(t, '#late') === '28/2' && !q(t, '#late').hasAttribute('data-tg-pending'), state(t, '#late'));
+  check('L7b 入: 1 回押すと本文、もう 1 回で画像', !(await press(t, '#late', 'text')) && state(t, '#late') === '28+text/1' && !(await press(t, '#late')) && state(t, '#late') === 'shown', state(t, '#late'));
+  t.close();
+
+  // YouTube: サムネイルが後から付くカード
+  const YT_LATE = `<!doctype html><body>
+    <ytd-video-renderer id="card"><div class="slot"></div><h3><a href="/watch?v=BBBBBBBBBB1">t</a></h3><ytd-channel-name><a href="/@tg_test_a">n</a></ytd-channel-name></ytd-video-renderer>
+  </body>`;
+  t = await boot(YT_LATE, new Map([['tg_local', '["yt:@tg_test_a"]'], ['tg_cfg', JSON.stringify({ clicks: 2, text: false })]]), { url: 'https://www.youtube.com/results?search_query=x' });
+  check('L8 YouTube 切: サムネイルがまだ無いカードは待つ', state(t, '#card') === 'shown' && q(t, '#card').hasAttribute('data-tg-pending'), state(t, '#card'));
+  q(t, '#card .slot').innerHTML = '<ytd-thumbnail><a href="/watch?v=BBBBBBBBBB1"><img></a></ytd-thumbnail>'; await t.sleep(400);
+  check('L9 YouTube 切: サムネイルが付いたらぼかす', state(t, '#card') === '28+text/1', state(t, '#card'));
+  t.close();
 });

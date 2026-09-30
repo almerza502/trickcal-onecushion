@@ -3,7 +3,7 @@
 // @name:ja      トリッカル もちもちワンクッション（ネタバレ回避）
 // @name:ko      트릭컬 원쿠션 (스포일러 방지)
 // @namespace    tg-guard
-// @version      0.5.7
+// @version      0.5.8
 // @description  Spoiler cushion for Trickcal players: blurs posts on X and video thumbnails on YouTube from the accounts you mark (or the experimental shared list), and shows them when you click. Judged per account, not by keywords. UI in English, Japanese and Korean.
 // @description:ja トリッカルの先行版（本国版）の内容を投稿しているアカウントの投稿をぼかし、クリックで表示するワンクッションを X に追加するネタバレ回避スクリプト。設定で YouTube のサムネイルにも使えます。判定はアカウント単位。
 // @description:ko 트릭컬 스포일러 원쿠션: 직접 가리기로 추가한 계정(또는 공유 목록·실험적 기능)의 X 글과 YouTube 썸네일을 가리고, 클릭하면 보여 줍니다. 키워드가 아니라 계정 단위로 판정합니다.
@@ -587,12 +587,14 @@
   //   data-tg-src      : 投稿者が該当した根拠 'local' | 'dist' | ''
   //   data-tg-revealed : このセッションで表示にした
   //   data-tg-entered  : 開いたページ（プロフィール・チャンネルのページ）の持ち主のものなので、ぼかしていない
+  //   data-tg-pending  : ぼかす対象で、画像などがまだ無い。後から付いたら判定し直す
   const BLUR_ATTRS = ['data-tg-blur', 'data-tg-text', 'data-tg-left', 'data-tg-step'];
   function unblur(article) {
     for (const el of [article, ...article.querySelectorAll('[data-tg-blur]')]) BLUR_ATTRS.forEach(a => el.removeAttribute(a));
   }
   function clearMarks(article) {
     for (const k of ['tgHandles', 'tgSrc', 'tgRevealed', 'tgEntered', 'tgName']) delete article.dataset[k];
+    for (const el of [article, ...article.querySelectorAll('[data-tg-pending]')]) el.removeAttribute('data-tg-pending');
     unblur(article);
   }
   const handlesOf = article => { try { return JSON.parse(article.dataset.tgHandles || '[]'); } catch { return []; } };
@@ -601,6 +603,11 @@
   const blurText = () => cfg.text !== false;
   // ぼかすものがあるか。本文をぼかさない設定で画像などが無ければ、何もしない
   const canBlur = target => blurText() || !!target.querySelector(MEDIA_SEL);
+  // 画像などは、投稿やカードの要素より少し遅れて付く。無かったときは印を付けておき、付いたら判定し直す
+  const pendingReady = el => {
+    const t = el.hasAttribute('data-tg-pending') ? el : el.querySelector('[data-tg-pending]');
+    return !!t && !!t.querySelector(MEDIA_SEL);
+  };
   function applyStep(target, step) {
     const n = clicksOf(), lv = blurLevels(n);
     const media = !!target.querySelector(MEDIA_SEL);
@@ -937,8 +944,10 @@
       if (card.matches(YT.noName)) card.dataset.tgName = ytCh.get(hd) || '@' + hd;
       if (entered) { card.dataset.tgRevealed = '1'; card.dataset.tgEntered = '1'; }
       else if (revealed.has(v.id)) card.dataset.tgRevealed = '1';
-      else if (!canBlur(card)) { /* ぼかすものが無い */ }
-      else if (!applyStep(card, steps.get(v.id)?.step || 0)) reveal(card);
+      else {
+        if (!card.querySelector(MEDIA_SEL)) card.setAttribute('data-tg-pending', '1');   // サムネイルがまだ無い。付いたら判定し直す
+        if (canBlur(card) && !applyStep(card, steps.get(v.id)?.step || 0)) reveal(card);
+      }
     }
     ytButtons(card);
   }
@@ -1036,7 +1045,7 @@
       if (!v) { if (card.dataset.tgKey) ytClear(card); continue; }
       ytButtons(card);
       const key = `${version}:${v.id}:${enteredKey()}`;
-      if (card.dataset.tgKey === key) continue;
+      if (card.dataset.tgKey === key && !pendingReady(card)) continue;
       card.dataset.tgKey = key;
       ytEvaluate(card, v, key);
     }
@@ -1101,8 +1110,11 @@
       article.dataset.tgHandles = JSON.stringify(handles);
       if (whole.length && p.author === enteredX()) { article.dataset.tgRevealed = '1'; article.dataset.tgEntered = '1'; }
       else if (id && revealed.has(id)) article.dataset.tgRevealed = '1';
-      else if (!canBlur(target)) { /* 本文だけの投稿で、本文はぼかさない設定 */ }
-      else if (!applyStep(target, (id && steps.get(id)?.step) || 0)) reveal(article);
+      else {
+        // 画像などが（まだ）無い。付いたら判定し直す（段階の数も、本文をぼかさない設定でのぼかしも、そこで決まる）
+        if (!target.querySelector(MEDIA_SEL)) target.setAttribute('data-tg-pending', '1');
+        if (canBlur(target) && !applyStep(target, (id && steps.get(id)?.step) || 0)) reveal(article);
+      }
     }
     ensureButtons(article);
   }
@@ -1120,7 +1132,7 @@
     for (const a of arts) {
       ensureButtons(a);
       const key = `${version}:${idOf(permalinkOf(a))}:${enteredKey()}`;
-      if (a.dataset.tgKey === key) continue;
+      if (a.dataset.tgKey === key && !pendingReady(a)) continue;
       a.dataset.tgKey = key;
       evaluate(a, key);
     }
